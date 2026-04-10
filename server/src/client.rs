@@ -5,14 +5,14 @@ use uuid::Uuid;
 
 pub struct Client {
     pub id: Uuid,
-    pub session: u8,
+    pub session: u32,
     pub addr: SocketAddr,
     pub tx: mpsc::Sender<String>,
     pub player: Player,
 }
 
 impl Client {
-    pub fn new(addr: SocketAddr, session: u8, tx: mpsc::Sender<String>) -> Self {
+    pub fn new(addr: SocketAddr, session: u32, tx: mpsc::Sender<String>) -> Self {
         Self {
             id: Self::derive_id(addr),
             session,

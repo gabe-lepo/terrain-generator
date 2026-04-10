@@ -11,6 +11,8 @@ use tokio::{
 
 use uuid::Uuid;
 
+use shared::{ClientMessage, ServerMessage};
+
 // TODO: Confirm if is enough for 2 players and 20hz? update freq
 const MAX_MESSAGES: usize = 32;
 
@@ -19,10 +21,11 @@ async fn main() {
     let listener = TcpListener::bind("127.0.0.1:8080")
         .await
         .expect("listener panicked!");
-    println!("Server listening on port 8080");
+    println!("Server listening on port 8080\n");
 
     // Shared state machine setup
     let registry: Arc<Mutex<Vec<Client>>> = Arc::new(Mutex::new(Vec::new()));
+    let mut next_session: u32 = 1;
 
     // Main accept loop
     loop {
@@ -35,7 +38,8 @@ async fn main() {
         let mut registry_guard = registry
             .lock()
             .expect("registry_guard lock failure (outer)");
-        let session = registry_guard.len() as u8 + 1;
+        let session = next_session;
+        next_session = next_session.wrapping_add(1);
         let client = Client::new(addr, session, tx);
         let client_id = client.id;
         registry_guard.push(client);
@@ -44,7 +48,7 @@ async fn main() {
         let registry_clone = Arc::clone(&registry);
 
         println!(
-            "New client connection:\n\tFrom: {addr}\n\tClient ID: {client_id}\n\tSession: {session}"
+            "New client connection:\n\tFrom: {addr}\n\tClient ID: {client_id}\n\tSession: {session}\n"
         );
         // Thread the connection handler
         tokio::spawn(async move {
@@ -59,6 +63,16 @@ async fn handle_connection(
     mut rx: mpsc::Receiver<String>,
     registry: Arc<Mutex<Vec<Client>>>,
 ) {
+    let session = {
+        let registry_guard = registry
+            .lock()
+            .expect("registry_guard lock failure (get session)");
+        registry_guard
+            .iter()
+            .find(|c| c.id == client_id)
+            .map(|c| c.session)
+            .expect("couldnt find session for client")
+    };
     let (reader, mut writer) = stream.into_split();
     let mut reader = BufReader::new(reader);
     let mut line = String::new();
@@ -69,16 +83,36 @@ async fn handle_connection(
             result = reader.read_line(&mut line) => {
                 match result {
                     Ok(0) => {
-                        println!("Client {client_id} disconnected");
+                        println!("Client {client_id} disconnected\n");
                         let mut registry_guard = registry.lock().expect("registry_guard lock failure (inner - Ok0)");
                         registry_guard.retain(|c| c.id != client_id);
                         break;
                     }
                     Ok(_) => {
-                        print!("Client {client_id} says:\n\t{line}");
-                        let registry_guard = registry.lock().expect("registry_guard lock failure (inner - Ok_)");
-                        for other in registry_guard.iter().filter(|c| c.id != client_id) {
-                            let _ = other.tx.try_send(line.clone());
+                        let trimmed = line.trim();
+                        match serde_json::from_str::<ClientMessage>(trimmed) {
+                            Ok(ClientMessage::PositionUpdate {position}) => {
+                                let msg = ServerMessage::PositionUpdate {
+                                    player_id: client_id,
+                                    position,
+                                };
+                                let serialized = serde_json::to_string(&msg).expect("serialization failure") + "\n";
+                                let registry_guard = registry.lock().expect("registry_guard lock failure (inner - Ok_)");
+                                for other in registry_guard.iter().filter(|c| c.id != client_id) {
+                                    // NOTE: If messages are "disappearing" in the future its
+                                    // likely that we dont check the Result<> from try_send here!
+                                    let _ = other.tx.try_send(serialized.clone());
+                                }
+                                println!("PositionUpdate:\n\tClient: {client_id}\n\tSession: {session}\n\tNew Position: x:{}|y:{}|z:{}\n",
+                                    position.x,
+                                    position.y,
+                                    position.z
+                                );
+                                // TODO: We dont actually update the player pos yet!
+                            }
+                            Err(e) => {
+                                println!("Invalid message!\n\tClient: {client_id}\n\tSession: {session}\n\tmsg: {trimmed}\n\tError: {e}\n");
+                            }
                         }
                     }
                     Err(e) => {

@@ -1,4 +1,17 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ClientMessage {
+    PositionUpdate { position: Vec3 },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ServerMessage {
+    PositionUpdate { player_id: Uuid, position: Vec3 },
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Vec3 {
@@ -29,4 +42,3 @@ impl Player {
         }
     }
 }
-
