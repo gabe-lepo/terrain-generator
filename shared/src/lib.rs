@@ -1,14 +1,32 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+impl Vec3 {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    pub fn zero() -> Self {
+        Self::new(0.0, 0.0, 0.0)
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Player {
+    pub position: Vec3,
+}
+
+impl Player {
+    pub fn new() -> Self {
+        Self {
+            position: Vec3::zero(),
+        }
+    }
+}
+
