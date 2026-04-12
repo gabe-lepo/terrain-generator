@@ -7,6 +7,8 @@ const MOVE_SPEED: f32 = 5.0;
 const GRAVITY_FORCE: f32 = 20.0;
 const JUMP_FORCE: f32 = 10.0;
 const MOUSE_SENSITIVITY: f32 = 0.003;
+const SPRINT_MULTIPLIER: f32 = 2.0;
+const CROUCH_MULTIPLIER: f32 = 0.5;
 const GOD_MODE: bool = false;
 
 pub struct Player {
@@ -15,6 +17,7 @@ pub struct Player {
     pub yaw: f32,
     pub pitch: f32,
     pub is_grounded: bool,
+    pub eye_height: f32,
 }
 
 impl Player {
@@ -25,6 +28,7 @@ impl Player {
             yaw: 0.0,
             pitch: 0.0,
             is_grounded: false,
+            eye_height: 1.8,
         }
     }
 
@@ -35,11 +39,9 @@ impl Player {
     }
 
     pub fn get_camera(&self) -> Camera3D {
-        const EYE_HEIGHT: f32 = 1.8;
-
         let eye_position = Vector3::new(
             self.position.x,
-            self.position.y + EYE_HEIGHT,
+            self.position.y + self.eye_height,
             self.position.z,
         );
 
@@ -60,21 +62,31 @@ impl Player {
     }
 
     fn handle_movement(&mut self, rl: &RaylibHandle, dt: f32) {
-        // TODO: Fix slower z,x translation when camera facing very up or very down
-        let forward = self.get_forward_vec();
+        let forward_flat = Vector3::new(self.yaw.sin(), 0.0, self.yaw.cos());
         let right = self.get_right_vec();
-        let move_speed = if GOD_MODE {
+        let mut move_speed = if GOD_MODE {
             MOVE_SPEED * 2.5
         } else {
             MOVE_SPEED
         };
 
+        // Sprinting and crouching mods
+        if rl.is_key_down(KeyboardKey::KEY_LEFT_SHIFT) {
+            move_speed *= SPRINT_MULTIPLIER;
+        }
+        if rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL) {
+            move_speed *= CROUCH_MULTIPLIER;
+            self.eye_height = 0.8;
+        } else {
+            self.eye_height = 1.8;
+        }
+
         // Horizontal movements
         if rl.is_key_down(KeyboardKey::KEY_W) {
-            self.position = self.position + forward * move_speed * dt;
+            self.position = self.position + forward_flat * move_speed * dt;
         }
         if rl.is_key_down(KeyboardKey::KEY_S) {
-            self.position = self.position - forward * move_speed * dt;
+            self.position = self.position - forward_flat * move_speed * dt;
         }
         if rl.is_key_down(KeyboardKey::KEY_A) {
             self.position = self.position - right * move_speed * dt;
