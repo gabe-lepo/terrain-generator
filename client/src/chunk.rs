@@ -1,12 +1,16 @@
+use std::f32;
+
 use noise::{NoiseFn, Perlin};
 use raylib::ffi;
 use raylib::prelude::*;
 
+use crate::chunk;
+
 // Consts
 pub const CHUNK_SIZE: i32 = 32;
-const TERRAIN_RESOLUTION: f32 = 5.0;
+pub const TERRAIN_RESOLUTION: f32 = 2.5;
 const HEIGHT_SCALE: f32 = 150.0;
-const NOISE_FREQ: f32 = 0.010;
+const NOISE_FREQ: f32 = 0.001;
 
 /// Chunk coordinates (not world coords!)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -38,9 +42,10 @@ impl ChunkCoord {
 }
 
 pub struct Chunk {
-    coord: ChunkCoord,
-    model: Model,
+    pub coord: ChunkCoord,
+    pub model: Model, // Make public so we can access materials
     heightmap: Vec<Vec<f32>>,
+    bounding_box: BoundingBox,
 }
 
 impl Chunk {
@@ -57,15 +62,22 @@ impl Chunk {
         let model = rl
             .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
             .expect("Failed to create model from mesh");
+        let bounding_box = Self::calculate_bounding_box(&heightmap, coord);
 
         Self {
             coord,
             model,
             heightmap,
+            bounding_box,
         }
     }
 
-    pub fn render(&self, d: &mut RaylibMode3D<RaylibDrawHandle>, render_wireframe: bool) {
+    pub fn render(
+        &self,
+        d: &mut RaylibMode3D<RaylibDrawHandle>,
+        render_wireframe: bool,
+        _shader: Option<&mut Shader>,
+    ) {
         let (world_x, world_z) = self.coord.to_world_pos();
         let position = Vector3::new(world_x, 0.0, world_z);
 
@@ -247,6 +259,28 @@ impl Chunk {
             // Wrap in Mesh
             Mesh::from_raw(mesh)
         } // WARN: Unsafe end
+    }
+
+    fn calculate_bounding_box(heightmap: &Vec<Vec<f32>>, coord: ChunkCoord) -> BoundingBox {
+        let (world_x, world_z) = coord.to_world_pos();
+
+        // Find min/max heights in heightmap
+        let mut min_height = f32::MAX;
+        let mut max_height = f32::MIN;
+
+        for row in heightmap {
+            for &height in row {
+                min_height = min_height.min(height);
+                max_height = max_height.max(height);
+            }
+        }
+
+        let chunk_size = CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
+
+        BoundingBox::new(
+            Vector3::new(world_x, min_height, world_z),
+            Vector3::new(world_x + chunk_size, max_height, world_z + chunk_size),
+        )
     }
 }
 
