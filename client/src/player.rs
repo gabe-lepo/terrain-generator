@@ -7,9 +7,10 @@ const MOVE_SPEED: f32 = 5.0;
 const GRAVITY_FORCE: f32 = 20.0;
 const JUMP_FORCE: f32 = 10.0;
 const MOUSE_SENSITIVITY: f32 = 0.003;
+const GOD_MODE: bool = false;
 
 pub struct Player {
-    position: Vector3,
+    pub position: Vector3,
     velocity: Vector3,
     yaw: f32,
     pitch: f32,
@@ -61,32 +62,38 @@ impl Player {
     fn handle_movement(&mut self, rl: &RaylibHandle, dt: f32) {
         let forward = self.get_forward_vec();
         let right = self.get_right_vec();
+        let move_speed = if GOD_MODE {
+            MOVE_SPEED * 2.5
+        } else {
+            MOVE_SPEED
+        };
 
         // Horizontal movements
         if rl.is_key_down(KeyboardKey::KEY_W) {
-            self.position = self.position + forward * MOVE_SPEED * dt;
+            self.position = self.position + forward * move_speed * dt;
         }
         if rl.is_key_down(KeyboardKey::KEY_S) {
-            self.position = self.position - forward * MOVE_SPEED * dt;
+            self.position = self.position - forward * move_speed * dt;
         }
         if rl.is_key_down(KeyboardKey::KEY_A) {
-            self.position = self.position - right * MOVE_SPEED * dt;
+            self.position = self.position - right * move_speed * dt;
         }
         if rl.is_key_down(KeyboardKey::KEY_D) {
-            self.position = self.position + right * MOVE_SPEED * dt;
+            self.position = self.position + right * move_speed * dt;
         }
 
         // God controls
-        // if rl.is_key_down(KeyboardKey::KEY_SPACE) {
-        //     self.position.y += MOVE_SPEED * dt;
-        // }
-        // if rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL) {
-        //     self.position.y -= MOVE_SPEED * dt;
-        // }
-
-        // JUmping
-        if rl.is_key_pressed(KeyboardKey::KEY_SPACE) && self.is_grounded {
-            self.velocity.y = JUMP_FORCE;
+        if GOD_MODE {
+            if rl.is_key_down(KeyboardKey::KEY_SPACE) {
+                self.position.y += move_speed * dt;
+            }
+            if rl.is_key_down(KeyboardKey::KEY_LEFT_CONTROL) {
+                self.position.y -= move_speed * dt;
+            }
+        } else {
+            if rl.is_key_pressed(KeyboardKey::KEY_SPACE) && self.is_grounded {
+                self.velocity.y = JUMP_FORCE;
+            }
         }
     }
 
@@ -107,10 +114,14 @@ impl Player {
     }
 
     fn update_physics(&mut self, rl: &RaylibHandle, world: &impl WorldQuery, dt: f32) {
+        if GOD_MODE {
+            return;
+        }
+
         // Gravity
         self.velocity.y -= GRAVITY_FORCE * dt;
 
-        // Pos from vel
+        // Position from velocity
         self.position.y += self.velocity.y * dt;
 
         // Get ground height at player pos

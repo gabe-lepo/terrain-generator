@@ -4,10 +4,11 @@ use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
 
 // Terrain gen params
-const TERRAIN_SIZE: i32 = 100;
+const TERRAIN_SIZE: i32 = 200;
 const TERRAIN_RESOLUTION: f32 = 1.0;
-const HEIGHT_SCALE: f32 = 20.0;
-const NOISE_FREQ: f32 = 0.05;
+const HEIGHT_SCALE: f32 = 80.0;
+const NOISE_FREQ: f32 = 0.015;
+const RENDER_WIREFRAME: bool = true;
 
 pub struct Terrain {
     model: Model,
@@ -42,7 +43,9 @@ impl Terrain {
         d.draw_model(&self.model, Vector3::zero(), 1.0, Color::WHITE);
 
         // Wireframe
-        d.draw_model_wires(&self.model, Vector3::zero(), 1.0, Color::BLACK);
+        if RENDER_WIREFRAME {
+            d.draw_model_wires(&self.model, Vector3::zero(), 1.0, Color::BLACK);
+        }
     }
 
     // Private
@@ -125,10 +128,13 @@ impl Terrain {
                 let height = heightmap[z][x];
                 let normalized_height = height / HEIGHT_SCALE;
 
-                // Color to black (low to high) gradient
-                let r = (0.0 + normalized_height * 255.0) as u8;
-                let g = (100.0 + normalized_height * 155.0) as u8;
-                let b = (0.0 + normalized_height * 255.0) as u8;
+                // logarithmic-like gradient curve
+                let color_height = normalized_height.powf(3.5);
+
+                // Color to white (low to high) gradient
+                let r = (0.0 + color_height * 255.0) as u8;
+                let g = (100.0 + color_height * 155.0) as u8;
+                let b = (0.0 + color_height * 255.0) as u8;
 
                 colors.push(r);
                 colors.push(g);

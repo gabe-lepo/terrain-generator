@@ -18,7 +18,7 @@ fn main() {
     rl_handle.disable_cursor();
 
     // Player and terrain setup
-    let mut player = Player::new(Vector3::new(0.0, 25.0, 50.0));
+    let mut player = Player::new(Vector3::new(0.0, 50.0, 0.0));
     let terrain = Terrain::new(&mut rl_handle, &rl_thread, 12345);
 
     // Main loop
@@ -37,5 +37,18 @@ fn main() {
         }
 
         draw_handle.draw_fps(10, 10);
+        draw_handle.draw_text(
+            format!(
+                "x:{}\ny:{}\nz:{}",
+                player.position.x.round_ties_even(),
+                player.position.y.round_ties_even(),
+                player.position.z.round_ties_even()
+            )
+            .as_str(),
+            10,
+            40,
+            20,
+            Color::BLACK,
+        );
     }
 }
