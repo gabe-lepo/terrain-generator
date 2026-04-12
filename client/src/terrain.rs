@@ -192,19 +192,43 @@ impl Terrain {
 
 impl WorldQuery for Terrain {
     fn get_height_at(&self, x: f32, z: f32) -> f32 {
-        // world coords to grid indices
         let offset = TERRAIN_SIZE as f32 / 2.0;
-        let grid_x = ((x + offset) / TERRAIN_RESOLUTION) as i32;
-        let grid_z = ((z + offset) / TERRAIN_RESOLUTION) as i32;
-
-        // Check bounds
         let grid_size = self.heightmap.len() as i32;
-        if grid_x < 0 || grid_x >= grid_size || grid_z < 0 || grid_z >= grid_size {
+
+        // Convert to grid coords
+        let grid_x = (x + offset) / TERRAIN_RESOLUTION;
+        let grid_z = (z + offset) / TERRAIN_RESOLUTION;
+
+        // Get int grid indices (bottom left corner of quad)
+        let x0 = grid_x.floor() as i32;
+        let z0 = grid_z.floor() as i32;
+        let x1 = x0 + 1;
+        let z1 = z0 + 1;
+
+        // Boundary check
+        if x0 < 0 || x1 >= grid_size || z0 < 0 || z1 >= grid_size {
             return 0.0;
         }
 
-        // Return height at hte grid point
-        self.heightmap[grid_z as usize][grid_x as usize]
+        // Get 4 corner heights of nearest neighbors
+        let h00 = self.heightmap[z0 as usize][x0 as usize]; // bottom left
+        let h10 = self.heightmap[z0 as usize][x1 as usize]; // bottom righyt
+        let h01 = self.heightmap[z1 as usize][x0 as usize]; // top left
+        let h11 = self.heightmap[z1 as usize][x1 as usize]; // top right
+
+        // Calc interpolation weights (normalized 0-1)
+        let fx = grid_x - (x0 as f32);
+        let fz = grid_z - (z0 as f32);
+
+        // Bilinear interpolation
+        // x axis
+        let h0 = h00 * (1.0 - fx) + h10 * fx; // bottom edge
+        let h1 = h01 * (1.0 - fx) + h11 * fx; // top edge
+
+        // Z axis
+        let height = h0 * (1.0 - fz) + h1 * fz;
+
+        height
     }
 }
 

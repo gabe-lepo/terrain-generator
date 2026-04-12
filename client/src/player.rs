@@ -11,10 +11,10 @@ const GOD_MODE: bool = false;
 
 pub struct Player {
     pub position: Vector3,
-    velocity: Vector3,
-    yaw: f32,
-    pitch: f32,
-    is_grounded: bool,
+    pub velocity: Vector3,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub is_grounded: bool,
 }
 
 impl Player {
