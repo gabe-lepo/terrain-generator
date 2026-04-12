@@ -60,6 +60,7 @@ impl Player {
     }
 
     fn handle_movement(&mut self, rl: &RaylibHandle, dt: f32) {
+        // TODO: Fix slower z,x translation when camera facing very up or very down
         let forward = self.get_forward_vec();
         let right = self.get_right_vec();
         let move_speed = if GOD_MODE {
@@ -118,6 +119,8 @@ impl Player {
             return;
         }
 
+        const GROUND_TOLERANCE: f32 = 0.2;
+
         // Gravity
         self.velocity.y -= GRAVITY_FORCE * dt;
 
@@ -127,10 +130,18 @@ impl Player {
         // Get ground height at player pos
         let ground_height = world.get_height_at(self.position.x, self.position.z);
 
-        // Check if hit ground
-        if self.position.y <= ground_height {
-            self.position.y = ground_height;
-            self.velocity.y = 0.0;
+        // Vertical distance to ground
+        let distance_to_ground = self.position.y - ground_height;
+
+        // Check if grounded with tolerance
+        if distance_to_ground <= GROUND_TOLERANCE {
+            // Snap if close enough
+            if distance_to_ground < 0.0
+                || (distance_to_ground < GROUND_TOLERANCE && self.velocity.y <= 0.0)
+            {
+                self.position.y = ground_height;
+                self.velocity.y = 0.0;
+            }
             self.is_grounded = true;
         } else {
             self.is_grounded = false;
