@@ -119,7 +119,8 @@ impl Player {
             return;
         }
 
-        const GROUND_TOLERANCE: f32 = 0.2;
+        const GROUND_TOLERANCE: f32 = 0.2; // Distance to ground to snap
+        const GROUND_STICK_SPEED: f32 = 10.0; // How fast to stick to terrain
 
         // Gravity
         self.velocity.y -= GRAVITY_FORCE * dt;
@@ -135,14 +136,24 @@ impl Player {
 
         // Check if grounded with tolerance
         if distance_to_ground <= GROUND_TOLERANCE {
-            // Snap if close enough
-            if distance_to_ground < 0.0
-                || (distance_to_ground < GROUND_TOLERANCE && self.velocity.y <= 0.0)
-            {
-                self.position.y = ground_height;
+            self.is_grounded = true;
+
+            // If moving downward or on ground, smoothly stick to terrain
+            if self.velocity.y <= 0.0 {
+                if distance_to_ground < 0.0 {
+                    // Below ground, snap up immediately
+                    self.position.y = ground_height;
+                } else {
+                    // Above ground, but close, smoothly move down
+                    let stick_amount = GROUND_STICK_SPEED * dt;
+                    if distance_to_ground < stick_amount {
+                        self.position.y = ground_height;
+                    } else {
+                        self.position.y -= stick_amount;
+                    }
+                }
                 self.velocity.y = 0.0;
             }
-            self.is_grounded = true;
         } else {
             self.is_grounded = false;
         }

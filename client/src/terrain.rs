@@ -4,7 +4,7 @@ use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
 
 // Terrain gen params
-const TERRAIN_SIZE: i32 = 200;
+const TERRAIN_SIZE: i32 = 250; // BUG: 275 and above crashes
 const TERRAIN_RESOLUTION: f32 = 1.0;
 const HEIGHT_SCALE: f32 = 80.0;
 const NOISE_FREQ: f32 = 0.04;
