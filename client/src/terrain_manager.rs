@@ -5,8 +5,9 @@ use noise::Perlin;
 use raylib::prelude::*;
 use std::collections::HashMap;
 
-const VIEW_DISTANCE: i32 = 20;
+const VIEW_DISTANCE: i32 = 25;
 const RENDER_WIREFRAME: bool = false;
+const MAX_DISTANCE_BUFFER: f32 = 1.5;
 
 pub struct TerrainManager {
     chunks: HashMap<ChunkCoord, Chunk>,
@@ -168,9 +169,8 @@ impl TerrainManager {
         // Max render distance in world units
         let max_distance = (VIEW_DISTANCE as f32) * (CHUNK_SIZE as f32) * TERRAIN_RESOLUTION;
 
-        // Start fog at 60% of max distance, full fog at 95%
-        let fog_near = max_distance * 0.6;
-        let fog_far = max_distance * 0.95;
+        let fog_near = max_distance * 0.4;
+        let fog_far = max_distance * 0.5;
 
         (fog_near, fog_far)
     }
@@ -213,7 +213,7 @@ impl TerrainManager {
         // Also check distnace (simple sphere test)
         let distance_sq =
             to_chunk.x * to_chunk.x + to_chunk.y * to_chunk.y + to_chunk.z * to_chunk.z;
-        let max_distance = (CHUNK_SIZE as f32 * VIEW_DISTANCE as f32) * 1.5; // Buffer it
+        let max_distance = (CHUNK_SIZE as f32 * VIEW_DISTANCE as f32) * MAX_DISTANCE_BUFFER;
 
         dot > 0.0 && distance_sq < max_distance * max_distance
     }

@@ -10,7 +10,7 @@ use crate::chunk;
 pub const CHUNK_SIZE: i32 = 32;
 pub const TERRAIN_RESOLUTION: f32 = 2.5;
 const HEIGHT_SCALE: f32 = 150.0;
-const NOISE_FREQ: f32 = 0.001;
+const NOISE_FREQ: f32 = 0.01;
 
 /// Chunk coordinates (not world coords!)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
