@@ -11,7 +11,8 @@ This is a Cargo workspace with three members:
   `ServerMessage`, `Vec3`, `Player`. All message enums use
   `#[serde(tag = "type")]` for tagged JSON serialization.
 - `server/` — async multiplayer game server built on Tokio
-- `client/` — client stub (currently just prints "Hello, world!")
+- `client/` — 3D terrain explorer built with raylib, procedurally
+  generated terrain using Perlin noise
 
 ## Commands
 
@@ -20,18 +21,20 @@ Run from workspace root:
 ```bash
 cargo build              # build all workspace members
 cargo run -p server      # run server
-cargo run -p client      # run client
+cargo run -p client      # run client (must be run from client/ dir for
+                         # shader paths to resolve)
 cargo test               # run all tests
 cargo test <name>        # run single test by name
 cargo clippy             # lint
 cargo fmt                # format
 ```
 
-The server listens on `127.0.0.1:8080`.
+The server listens on `127.0.0.1:8080`. The client expects shader files
+at `client/shaders/` relative to the working directory.
 
 ## Architecture
 
-### Server Design
+### Server
 
 The server uses an async tokio runtime with the following architecture:
 
@@ -58,12 +61,41 @@ The server uses an async tokio runtime with the following architecture:
 - Each connection gets a unique session number regardless of UUID
 - On disconnect, client is removed from registry via `retain`
 
-### Known TODOs
+### Client
 
-- Server does not yet update `Client.player.position` in registry when
-  receiving position updates (server/src/main.rs:111)
-- If messages disappear, check `try_send` Result handling
-  (server/src/main.rs:104)
+The client is a 3D first-person terrain explorer built on raylib with the
+following architecture:
+
+**Terrain system:**
+- Infinite procedural terrain via chunk-based streaming
+  (`TerrainManager`)
+- Each `Chunk` is a 32x32 grid at 2.5 unit resolution, generated from
+  Perlin noise heightmap
+- Chunks load/unload based on player position (VIEW_DISTANCE = 25 chunks)
+- Frustum culling skips rendering chunks outside camera view
+- `WorldQuery` trait allows player physics to query terrain height via
+  bilinear interpolation of heightmap
+
+**Mesh generation:**
+- Heightmap → vertices/indices → raylib `Mesh` via unsafe FFI
+- Memory allocated with `libc::malloc`, uploaded to GPU with
+  `UploadMesh`
+- Vertex colors based on height (darker green → lighter as height
+  increases)
+
+**Rendering:**
+- Distance fog shader (`client/shaders/fog.{vs,fs}`) applied to all chunk
+  models
+- Shader uniforms (camera position, fog distances, fog color) updated per
+  frame via unsafe `SetShaderValue` FFI calls
+- Fog distances calculated as percentage of max view distance
+  (fog_near = 40%, fog_far = 50%)
+
+**Player controller:**
+- First-person camera with mouse look (yaw/pitch) and WASD movement
+- Physics: gravity, jumping, ground detection with terrain snapping
+- GOD_MODE constant bypasses physics for free flight
+- Sprint (Left Shift) and crouch (Left Control) modifiers
 
 ### Message Types
 
@@ -75,3 +107,10 @@ serializes as:
 ```
 
 The `type` field acts as the enum discriminant in JSON.
+
+### Known TODOs
+
+- Server does not yet update `Client.player.position` in registry when
+  receiving position updates (server/src/main.rs:111)
+- If messages disappear, check `try_send` Result handling
+  (server/src/main.rs:104)

@@ -29,7 +29,7 @@ fn main() {
     rl_handle.disable_cursor();
 
     // Player and terrain setup
-    let mut player = Player::new(Vector3::new(0.0, 200.0, 0.0));
+    let mut player = Player::new(Vector3::new(0.0, 100.0, 0.0));
     let mut terrain_manager = TerrainManager::new(12345);
 
     // Shader setup
@@ -56,18 +56,6 @@ fn main() {
         // Calculate fog settings based on actual view distance
         let (fog_near, fog_far) = terrain_manager.get_fog_distances();
 
-        // Debug: Print fog distances and camera position every 60 frames
-        if rl_handle.get_frame_time() > 0.0 && rl_handle.get_fps() > 0 {
-            let frame = (rl_handle.get_time() * 60.0) as i32;
-            if frame % 60 == 0 {
-                let cam_pos = player.get_camera().position;
-                println!(
-                    "DEBUG: fog_near={:.1}, fog_far={:.1}, camera=({:.1}, {:.1}, {:.1})",
-                    fog_near, fog_far, cam_pos.x, cam_pos.y, cam_pos.z
-                );
-            }
-        }
-
         // 2d drawing setup before 3d
         let mut draw_handle = rl_handle.begin_drawing(&rl_thread);
         draw_handle.clear_background(BACKGROUND_COLOR);
@@ -78,7 +66,7 @@ fn main() {
             terrain_manager.render(
                 &mut draw3d_handle,
                 &player.get_camera(),
-                shader_manager.get_fog_shader(),
+                &shader_manager,
                 fog_near,
                 fog_far,
                 BACKGROUND_COLOR,

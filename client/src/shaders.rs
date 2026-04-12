@@ -42,7 +42,6 @@ impl ShaderManager {
 
     pub fn update_fog_shader(
         &self,
-        rl: &mut RaylibHandle,
         camera: &Camera3D,
         fog_near: f32,
         fog_far: f32,
@@ -93,10 +92,6 @@ impl ShaderManager {
 
     pub fn get_fog_shader(&self) -> Option<&Shader> {
         self.fog_shader.as_ref()
-    }
-
-    pub fn get_fog_shader_mut(&mut self) -> Option<&mut Shader> {
-        self.fog_shader.as_mut()
     }
 
     // Private

@@ -1,4 +1,5 @@
 use crate::chunk::{CHUNK_SIZE, Chunk, ChunkCoord, TERRAIN_RESOLUTION};
+use crate::shaders::ShaderManager;
 use crate::world::WorldQuery;
 
 use noise::Perlin;
@@ -6,7 +7,7 @@ use raylib::prelude::*;
 use std::collections::HashMap;
 
 const VIEW_DISTANCE: i32 = 25;
-const RENDER_WIREFRAME: bool = false;
+const RENDER_WIREFRAME: bool = true;
 const MAX_DISTANCE_BUFFER: f32 = 1.5;
 
 pub struct TerrainManager {
@@ -74,80 +75,31 @@ impl TerrainManager {
         &mut self,
         d: &mut RaylibMode3D<RaylibDrawHandle>,
         camera: &Camera3D,
-        fog_shader: Option<&Shader>,
+        shader_manager: &ShaderManager,
         fog_near: f32,
         fog_far: f32,
         fog_color: Color,
     ) {
-        let chunk_size = CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
         let mut rendered_count = 0;
 
         // Set shader on all chunk models if provided
-        if let Some(shader) = fog_shader {
-            // Set the fog shader on each chunk's material
-            for chunk in self.chunks.values_mut() {
-                unsafe {
+        if !RENDER_WIREFRAME {
+            if let Some(shader) = shader_manager.get_fog_shader() {
+                // Set fog shader on each chunks material
+                for chunk in self.chunks.values_mut() {
                     let materials = chunk.model.materials_mut();
                     if let Some(material) = materials.get_mut(0) {
                         material.as_mut().shader = shader.as_ref().clone();
                     }
                 }
-            }
 
-            // Update shader uniforms
-            unsafe {
-                use raylib::ffi;
-
-                let camera_loc = shader.get_shader_location("cameraPosition");
-                let fog_color_loc = shader.get_shader_location("fogColor");
-                let fog_near_loc = shader.get_shader_location("fogNear");
-                let fog_far_loc = shader.get_shader_location("fogFar");
-
-                // Set camera position
-                ffi::SetShaderValue(
-                    shader.as_ref().clone(),
-                    camera_loc,
-                    [camera.position.x, camera.position.y, camera.position.z].as_ptr() as *const _,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC3 as i32,
-                );
-
-                // Set fog color
-                let fog_color_norm = [
-                    fog_color.r as f32 / 255.0,
-                    fog_color.g as f32 / 255.0,
-                    fog_color.b as f32 / 255.0,
-                    fog_color.a as f32 / 255.0,
-                ];
-                ffi::SetShaderValue(
-                    shader.as_ref().clone(),
-                    fog_color_loc,
-                    fog_color_norm.as_ptr() as *const _,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
-                );
-
-                // Set fog distances
-                ffi::SetShaderValue(
-                    shader.as_ref().clone(),
-                    fog_near_loc,
-                    &fog_near as *const f32 as *const _,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
-                );
-
-                ffi::SetShaderValue(
-                    shader.as_ref().clone(),
-                    fog_far_loc,
-                    &fog_far as *const f32 as *const _,
-                    ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
-                );
+                shader_manager.update_fog_shader(camera, fog_near, fog_far, fog_color);
             }
         }
 
         // Render chunks
         for chunk in self.chunks.values() {
-            let (world_x, world_z) = chunk.coord.to_world_pos();
-            let chunk_pos = Vector3::new(world_x, 0.0, world_z);
-
-            if Self::is_chunk_potentially_visible(camera, chunk_pos, chunk_size) {
+            if Self::is_chunk_potentially_visible(camera, chunk) {
                 chunk.render(d, RENDER_WIREFRAME, None);
                 rendered_count += 1;
             }
@@ -181,11 +133,8 @@ impl TerrainManager {
         get_height(x, z, &self.noise, self.seed_offset)
     }
 
-    fn is_chunk_potentially_visible(
-        camera: &Camera3D,
-        chunk_pos: Vector3,
-        chunk_size: f32,
-    ) -> bool {
+    fn is_chunk_potentially_visible(camera: &Camera3D, chunk: &Chunk) -> bool {
+        let bbox = &chunk.bounding_box;
         // Camera forward direction
         let forward = Vector3::new(
             camera.target.x - camera.position.x,
@@ -194,28 +143,36 @@ impl TerrainManager {
         )
         .normalized();
 
-        // Vector from camera to chunk center
-        let chunk_center = Vector3::new(
-            chunk_pos.x + chunk_size / 2.0,
-            chunk_pos.y,
-            chunk_pos.z + chunk_size / 2.0,
+        // Vector from camera to bounding box center
+        let bbox_center = Vector3::new(
+            (bbox.min.x + bbox.max.x) / 2.0,
+            (bbox.min.y + bbox.max.y) / 2.0,
+            (bbox.min.z + bbox.max.z) / 2.0,
         );
 
-        let to_chunk = Vector3::new(
-            chunk_center.x - camera.position.x,
-            chunk_center.y - camera.position.y,
-            chunk_center.z - camera.position.z,
+        let to_center = Vector3::new(
+            bbox_center.x - camera.position.x,
+            bbox_center.y - camera.position.y,
+            bbox_center.z - camera.position.z,
         );
 
-        // Dot product, if negative chunk is behind camera
-        let dot = forward.x * to_chunk.x + forward.y * to_chunk.y + forward.z * to_chunk.z;
+        // Dot product, is chunk generally in front of camera?
+        let dot = forward.x * to_center.x + forward.y * to_center.y + forward.z * to_center.z;
 
-        // Also check distnace (simple sphere test)
-        let distance_sq =
-            to_chunk.x * to_chunk.x + to_chunk.y * to_chunk.y + to_chunk.z * to_chunk.z;
+        // Calc bbox radius (half diagonal)
+        let radius = Vector3::new(
+            (bbox.max.x - bbox.min.x) / 2.0,
+            (bbox.max.y - bbox.min.y) / 2.0,
+            (bbox.max.z - bbox.min.z) / 2.0,
+        )
+        .length();
+
+        // Distance check with radius consideration
+        let distance = to_center.length();
         let max_distance = (CHUNK_SIZE as f32 * VIEW_DISTANCE as f32) * MAX_DISTANCE_BUFFER;
 
-        dot > 0.0 && distance_sq < max_distance * max_distance
+        // Chunk is visible if its in front with radius tolerance and within range
+        dot > -radius && distance < max_distance + radius
     }
 }
 

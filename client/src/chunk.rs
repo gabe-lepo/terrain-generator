@@ -4,13 +4,14 @@ use noise::{NoiseFn, Perlin};
 use raylib::ffi;
 use raylib::prelude::*;
 
-use crate::chunk;
-
 // Consts
 pub const CHUNK_SIZE: i32 = 32;
 pub const TERRAIN_RESOLUTION: f32 = 2.5;
 const HEIGHT_SCALE: f32 = 150.0;
 const NOISE_FREQ: f32 = 0.01;
+const OCTAVES: i32 = 5; // Num layers
+const LACUNARITY: f64 = 2.0; // Frequency multiplier
+const PERSISTENCE: f64 = 0.5; // Amplitude multiplier
 
 /// Chunk coordinates (not world coords!)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -45,7 +46,7 @@ pub struct Chunk {
     pub coord: ChunkCoord,
     pub model: Model, // Make public so we can access materials
     heightmap: Vec<Vec<f32>>,
-    bounding_box: BoundingBox,
+    pub bounding_box: BoundingBox,
 }
 
 impl Chunk {
@@ -58,7 +59,7 @@ impl Chunk {
         thread: &RaylibThread,
     ) -> Self {
         let heightmap = Self::generate_heightmap(coord, noise, seed_offset);
-        let mesh = Self::build_mesh(coord, &heightmap);
+        let mesh = Self::build_mesh(&heightmap);
         let model = rl
             .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
             .expect("Failed to create model from mesh");
@@ -146,7 +147,7 @@ impl Chunk {
     }
 
     // Private
-    fn build_mesh(coord: ChunkCoord, heightmap: &Vec<Vec<f32>>) -> Mesh {
+    fn build_mesh(heightmap: &Vec<Vec<f32>>) -> Mesh {
         let grid_size = heightmap.len();
         let vertex_count = grid_size * grid_size;
         let triangle_count = (grid_size - 1) * (grid_size - 1) * 2;
@@ -159,8 +160,8 @@ impl Chunk {
         // Generate vertices (relative to chunk origin at 0,0,0)
         for z in 0..grid_size {
             for x in 0..grid_size {
-                let local_x = (x as f32 * TERRAIN_RESOLUTION);
-                let local_z = (z as f32 * TERRAIN_RESOLUTION);
+                let local_x = x as f32 * TERRAIN_RESOLUTION;
+                let local_z = z as f32 * TERRAIN_RESOLUTION;
                 let height = heightmap[z][x];
 
                 vertices.push(local_x);
@@ -284,11 +285,27 @@ impl Chunk {
     }
 }
 
+/// Fancy terrain gen
 pub fn get_height(x: f32, z: f32, noise: &Perlin, seed_offset: f64) -> f32 {
-    let nx = (x as f64) * (NOISE_FREQ as f64) + seed_offset;
-    let nz = (z as f64) * (NOISE_FREQ as f64) + seed_offset;
-    let noise_val = noise.get([nx, nz]);
-    let height = ((noise_val + 1.0) / 2.0) * (HEIGHT_SCALE as f64);
+    let mut total = 0.0;
+    let mut amplitude = 1.0;
+    let mut frequency = NOISE_FREQ as f64;
+    let mut max_value = 0.0; // Normalization
+
+    for _ in 0..OCTAVES {
+        let nx = (x as f64) * frequency + seed_offset;
+        let nz = (z as f64) * frequency + seed_offset;
+        let noise_val = noise.get([nx, nz]);
+
+        total += noise_val * amplitude;
+        max_value += amplitude;
+
+        amplitude *= PERSISTENCE;
+        frequency *= LACUNARITY;
+    }
+
+    let normalized = total / max_value;
+    let height = ((normalized + 1.0) / 2.0) * (HEIGHT_SCALE as f64);
 
     height as f32
 }

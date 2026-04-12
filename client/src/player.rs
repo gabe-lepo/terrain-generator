@@ -9,7 +9,7 @@ const JUMP_FORCE: f32 = 10.0;
 const MOUSE_SENSITIVITY: f32 = 0.003;
 const SPRINT_MULTIPLIER: f32 = 2.0;
 const CROUCH_MULTIPLIER: f32 = 0.5;
-const GOD_MODE: bool = true;
+const GOD_MODE: bool = false;
 
 pub struct Player {
     pub position: Vector3,
@@ -34,8 +34,8 @@ impl Player {
 
     pub fn update(&mut self, rl: &RaylibHandle, world: &impl WorldQuery, dt: f32) {
         self.handle_mouse_look(rl);
-        self.handle_movement(rl, dt);
-        self.update_physics(rl, world, dt);
+        self.handle_movement(rl, dt, world);
+        self.update_physics(world, dt);
     }
 
     pub fn get_camera(&self) -> Camera3D {
@@ -61,7 +61,7 @@ impl Player {
         self.pitch = self.pitch.clamp(-1.5, 1.5);
     }
 
-    fn handle_movement(&mut self, rl: &RaylibHandle, dt: f32) {
+    fn handle_movement(&mut self, rl: &RaylibHandle, dt: f32, world: &impl WorldQuery) {
         let forward_flat = Vector3::new(self.yaw.sin(), 0.0, self.yaw.cos());
         let right = self.get_right_vec();
         let mut move_speed = if GOD_MODE {
@@ -95,6 +95,13 @@ impl Player {
             self.position = self.position + right * move_speed * dt;
         }
 
+        // ensure not clipping after horizontal movement
+        let ground_height = world.get_height_at(self.position.x, self.position.z);
+        if self.position.y < ground_height {
+            self.position.y = ground_height;
+            self.is_grounded = true;
+        }
+
         // God controls
         if GOD_MODE {
             if rl.is_key_down(KeyboardKey::KEY_SPACE) {
@@ -126,7 +133,7 @@ impl Player {
         )
     }
 
-    fn update_physics(&mut self, rl: &RaylibHandle, world: &impl WorldQuery, dt: f32) {
+    fn update_physics(&mut self, world: &impl WorldQuery, dt: f32) {
         if GOD_MODE {
             return;
         }
