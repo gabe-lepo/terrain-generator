@@ -1,65 +1,93 @@
-use crate::world::WorldQuery;
-
 use noise::{NoiseFn, Perlin};
+use raylib::ffi;
 use raylib::prelude::*;
 
-// Terrain gen params
-const TERRAIN_SIZE: i32 = 250; // BUG: 275 and above crashes
-const TERRAIN_RESOLUTION: f32 = 1.0;
-const HEIGHT_SCALE: f32 = 80.0;
-const NOISE_FREQ: f32 = 0.015;
-const RENDER_WIREFRAME: bool = true;
+// Consts
+pub const CHUNK_SIZE: i32 = 32;
+const TERRAIN_RESOLUTION: f32 = 5.0;
+const HEIGHT_SCALE: f32 = 150.0;
+const NOISE_FREQ: f32 = 0.010;
 
-pub struct Terrain {
-    model: Model,
-    heightmap: Vec<Vec<f32>>,
-    seed: u32,
+/// Chunk coordinates (not world coords!)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ChunkCoord {
+    pub x: i32,
+    pub z: i32,
 }
 
-impl Terrain {
-    // Public
-    pub fn new(rl: &mut RaylibHandle, thread: &RaylibThread, seed: u32) -> Self {
-        let noise = Perlin::new(seed);
-        let seed_offset = seed as f64 + 1000.0;
+impl ChunkCoord {
+    pub fn new(x: i32, z: i32) -> Self {
+        Self { x, z }
+    }
 
-        // gen heightmap
-        let heightmap = Self::generate_heightmap(&noise, seed_offset);
+    /// Convert world position to chunk coordinate
+    pub fn from_world_pos(world_x: f32, world_z: f32) -> Self {
+        let chunk_x = (world_x / (CHUNK_SIZE as f32 * TERRAIN_RESOLUTION)).floor() as i32;
+        let chunk_z = (world_z / (CHUNK_SIZE as f32 * TERRAIN_RESOLUTION)).floor() as i32;
 
-        // Build mesh and model
-        let mesh = Self::build_mesh(&heightmap, rl, thread);
+        Self::new(chunk_x, chunk_z)
+    }
+
+    /// Get world position of chunk origin (bottom left corner)
+    pub fn to_world_pos(&self) -> (f32, f32) {
+        let world_x = self.x as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
+        let world_z = self.z as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
+
+        (world_x, world_z)
+    }
+}
+
+pub struct Chunk {
+    coord: ChunkCoord,
+    model: Model,
+    heightmap: Vec<Vec<f32>>,
+}
+
+impl Chunk {
+    /// Generate chunk at given chunk coord
+    pub fn generate(
+        coord: ChunkCoord,
+        noise: &Perlin,
+        seed_offset: f64,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+    ) -> Self {
+        let heightmap = Self::generate_heightmap(coord, noise, seed_offset);
+        let mesh = Self::build_mesh(coord, &heightmap);
         let model = rl
             .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
             .expect("Failed to create model from mesh");
 
         Self {
+            coord,
             model,
             heightmap,
-            seed,
         }
     }
 
-    pub fn render(&self, d: &mut RaylibMode3D<RaylibDrawHandle>) {
-        // Terrain model
-        d.draw_model(&self.model, Vector3::zero(), 1.0, Color::WHITE);
+    pub fn render(&self, d: &mut RaylibMode3D<RaylibDrawHandle>, render_wireframe: bool) {
+        let (world_x, world_z) = self.coord.to_world_pos();
+        let position = Vector3::new(world_x, 0.0, world_z);
 
-        // Wireframe
-        if RENDER_WIREFRAME {
-            d.draw_model_wires(&self.model, Vector3::zero(), 1.0, Color::BLACK);
+        d.draw_model(&self.model, position, 1.0, Color::WHITE);
+
+        if render_wireframe {
+            d.draw_model_wires(&self.model, position, 1.0, Color::BLACK);
         }
     }
 
-    // Private
-    fn generate_heightmap(noise: &Perlin, seed_offset: f64) -> Vec<Vec<f32>> {
-        let grid_size = (TERRAIN_SIZE as f32 / TERRAIN_RESOLUTION) as usize;
+    /// Generate heightmap for the chunk
+    fn generate_heightmap(coord: ChunkCoord, noise: &Perlin, seed_offset: f64) -> Vec<Vec<f32>> {
+        let grid_size = CHUNK_SIZE as usize + 1;
         let mut heightmap = Vec::with_capacity(grid_size);
 
-        let offset = TERRAIN_SIZE as f32 / 2.0; // Centering offset
+        let (chunk_world_x, chunk_world_z) = coord.to_world_pos();
 
         for z in 0..grid_size {
             let mut row = Vec::with_capacity(grid_size);
             for x in 0..grid_size {
-                let world_x = (x as f32 * TERRAIN_RESOLUTION) - offset;
-                let world_z = (z as f32 * TERRAIN_RESOLUTION) - offset;
+                let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
+                let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
                 let height = get_height(world_x, world_z, noise, seed_offset);
                 row.push(height);
             }
@@ -69,7 +97,44 @@ impl Terrain {
         heightmap
     }
 
-    fn build_mesh(heightmap: &Vec<Vec<f32>>, rl: &mut RaylibHandle, thread: &RaylibThread) -> Mesh {
+    pub fn get_height_at_local(&self, local_x: f32, local_z: f32) -> f32 {
+        // Convert local coords to grid coords
+        let grid_x = local_x / TERRAIN_RESOLUTION;
+        let grid_z = local_z / TERRAIN_RESOLUTION;
+
+        // Get grid square corners
+        let x0 = grid_x.floor() as i32;
+        let z0 = grid_z.floor() as i32;
+        let x1 = x0 + 1;
+        let z1 = z0 + 1;
+
+        let grid_size = self.heightmap.len() as i32;
+
+        // Bounds check
+        if x0 < 0 || x1 >= grid_size || z0 < 0 || z1 >= grid_size {
+            return 0.0;
+        }
+
+        // Get 4 corner heights
+        let h00 = self.heightmap[z0 as usize][x0 as usize];
+        let h10 = self.heightmap[z0 as usize][x1 as usize];
+        let h01 = self.heightmap[z1 as usize][x0 as usize];
+        let h11 = self.heightmap[z1 as usize][x1 as usize];
+
+        // Calc interpolation weights
+        let fx = grid_x - (x0 as f32);
+        let fz = grid_z - (z0 as f32);
+
+        // Bilinear interp
+        let h0 = h00 * (1.0 - fx) + h10 * fx;
+        let h1 = h01 * (1.0 - fx) + h11 * fx;
+        let height = h0 * (1.0 - fz) + h1 * fz;
+
+        height
+    }
+
+    // Private
+    fn build_mesh(coord: ChunkCoord, heightmap: &Vec<Vec<f32>>) -> Mesh {
         let grid_size = heightmap.len();
         let vertex_count = grid_size * grid_size;
         let triangle_count = (grid_size - 1) * (grid_size - 1) * 2;
@@ -77,19 +142,18 @@ impl Terrain {
         let mut vertices = Vec::with_capacity(vertex_count * 3);
         let mut indices = Vec::with_capacity(triangle_count * 3);
         let mut normals = Vec::with_capacity(vertex_count * 3);
+        let mut colors = Vec::with_capacity(vertex_count * 4);
 
-        let offset = TERRAIN_SIZE as f32 / 2.0;
-
-        // Generate vertices
+        // Generate vertices (relative to chunk origin at 0,0,0)
         for z in 0..grid_size {
             for x in 0..grid_size {
-                let world_x = (x as f32 * TERRAIN_RESOLUTION) - offset;
-                let world_z = (z as f32 * TERRAIN_RESOLUTION) - offset;
+                let local_x = (x as f32 * TERRAIN_RESOLUTION);
+                let local_z = (z as f32 * TERRAIN_RESOLUTION);
                 let height = heightmap[z][x];
 
-                vertices.push(world_x);
+                vertices.push(local_x);
                 vertices.push(height);
-                vertices.push(world_z);
+                vertices.push(local_z);
             }
         }
 
@@ -113,22 +177,18 @@ impl Terrain {
             }
         }
 
-        // Calc normals (flat shading for now)
-        // TODO: For now, lets use simple up pointing normals
+        // Calc normals (simple up pointing for now)
         for _ in 0..vertex_count {
             normals.push(0.0);
-            normals.push(1.0); // Up vector
+            normals.push(1.0);
             normals.push(0.0);
         }
 
-        // Vertex height-based colors for simple visual clarity on terrain
-        let mut colors = Vec::with_capacity(vertex_count * 4); // RGBA
+        // Gen vertex colors based on height
         for z in 0..grid_size {
             for x in 0..grid_size {
                 let height = heightmap[z][x];
                 let normalized_height = height / HEIGHT_SCALE;
-
-                // logarithmic-like gradient curve
                 let color_height = normalized_height.powf(3.5);
 
                 // Color to white (low to high) gradient
@@ -144,7 +204,7 @@ impl Terrain {
         }
 
         // Now build raylib mesh
-        // WARN: Unsafe block due to raylib C API & raylib-rs FFI impl
+        // WARN: Unsafe block (unsafe FFI)
         unsafe {
             // Alloc mem using libc malloc
             let vertices_ptr =
@@ -181,7 +241,7 @@ impl Terrain {
                 vboId: std::ptr::null_mut(),
             };
 
-            // Fire to GPU
+            // Fire off to GPU
             ffi::UploadMesh(&mut mesh, false);
 
             // Wrap in Mesh
@@ -190,57 +250,10 @@ impl Terrain {
     }
 }
 
-impl WorldQuery for Terrain {
-    fn get_height_at(&self, x: f32, z: f32) -> f32 {
-        let offset = TERRAIN_SIZE as f32 / 2.0;
-        let grid_size = self.heightmap.len() as i32;
-
-        // Convert to grid coords
-        let grid_x = (x + offset) / TERRAIN_RESOLUTION;
-        let grid_z = (z + offset) / TERRAIN_RESOLUTION;
-
-        // Get int grid indices (bottom left corner of quad)
-        let x0 = grid_x.floor() as i32;
-        let z0 = grid_z.floor() as i32;
-        let x1 = x0 + 1;
-        let z1 = z0 + 1;
-
-        // Boundary check
-        if x0 < 0 || x1 >= grid_size || z0 < 0 || z1 >= grid_size {
-            return 0.0;
-        }
-
-        // Get 4 corner heights of nearest neighbors
-        let h00 = self.heightmap[z0 as usize][x0 as usize]; // bottom left
-        let h10 = self.heightmap[z0 as usize][x1 as usize]; // bottom righyt
-        let h01 = self.heightmap[z1 as usize][x0 as usize]; // top left
-        let h11 = self.heightmap[z1 as usize][x1 as usize]; // top right
-
-        // Calc interpolation weights (normalized 0-1)
-        let fx = grid_x - (x0 as f32);
-        let fz = grid_z - (z0 as f32);
-
-        // Bilinear interpolation
-        // x axis
-        let h0 = h00 * (1.0 - fx) + h10 * fx; // bottom edge
-        let h1 = h01 * (1.0 - fx) + h11 * fx; // top edge
-
-        // Z axis
-        let height = h0 * (1.0 - fz) + h1 * fz;
-
-        height
-    }
-}
-
-fn get_height(x: f32, z: f32, noise: &Perlin, seed_offset: f64) -> f32 {
-    // Scale input coords by freq
+pub fn get_height(x: f32, z: f32, noise: &Perlin, seed_offset: f64) -> f32 {
     let nx = (x as f64) * (NOISE_FREQ as f64) + seed_offset;
     let nz = (z as f64) * (NOISE_FREQ as f64) + seed_offset;
-
-    // Sample noise
     let noise_val = noise.get([nx, nz]);
-
-    // Normalize from -1,1 -> 0,HEIGHT_SCALE
     let height = ((noise_val + 1.0) / 2.0) * (HEIGHT_SCALE as f64);
 
     height as f32
