@@ -1,7 +1,8 @@
 // WARN: REMOVE THESE ALLOWS
-// #![allow(dead_code, unused)]
+#![allow(dead_code, unused)]
 mod player;
 mod terrain;
+mod world;
 
 use player::Player;
 use raylib::prelude::*;
@@ -17,14 +18,14 @@ fn main() {
     rl_handle.disable_cursor();
 
     // Player and terrain setup
-    let mut player = Player::new(Vector3::new(0.0, 10.0, 0.0));
+    let mut player = Player::new(Vector3::new(0.0, 25.0, 50.0));
     let terrain = Terrain::new(&mut rl_handle, &rl_thread, 12345);
 
     // Main loop
     while !rl_handle.window_should_close() {
         // Update
         let dt = rl_handle.get_frame_time();
-        player.update(&rl_handle, dt);
+        player.update(&rl_handle, &terrain, dt);
 
         let mut draw_handle = rl_handle.begin_drawing(&rl_thread);
         draw_handle.clear_background(Color::DEEPSKYBLUE);

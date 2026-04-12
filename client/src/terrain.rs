@@ -1,3 +1,5 @@
+use crate::world::WorldQuery;
+
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
 
@@ -8,8 +10,7 @@ const HEIGHT_SCALE: f32 = 20.0;
 const NOISE_FREQ: f32 = 0.05;
 
 pub struct Terrain {
-    mesh: Mesh,
-    material: WeakMaterial,
+    model: Model,
     heightmap: Vec<Vec<f32>>,
     seed: u32,
 }
@@ -23,22 +24,25 @@ impl Terrain {
         // gen heightmap
         let heightmap = Self::generate_heightmap(&noise, seed_offset);
 
-        // Build mesh from heightmap
+        // Build mesh and model
         let mesh = Self::build_mesh(&heightmap, rl, thread);
-
-        // Default material
-        let material = rl.load_material_default(thread);
+        let model = rl
+            .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
+            .expect("Failed to create model from mesh");
 
         Self {
-            mesh,
-            material,
+            model,
             heightmap,
             seed,
         }
     }
 
     pub fn render(&self, d: &mut RaylibMode3D<RaylibDrawHandle>) {
-        d.draw_mesh(&self.mesh, self.material.clone(), Matrix::identity());
+        // Terrain model
+        d.draw_model(&self.model, Vector3::zero(), 1.0, Color::WHITE);
+
+        // Wireframe
+        d.draw_model_wires(&self.model, Vector3::zero(), 1.0, Color::BLACK);
     }
 
     // Private
@@ -114,6 +118,25 @@ impl Terrain {
             normals.push(0.0);
         }
 
+        // Vertex height-based colors for simple visual clarity on terrain
+        let mut colors = Vec::with_capacity(vertex_count * 4); // RGBA
+        for z in 0..grid_size {
+            for x in 0..grid_size {
+                let height = heightmap[z][x];
+                let normalized_height = height / HEIGHT_SCALE;
+
+                // Color to black (low to high) gradient
+                let r = (0.0 + normalized_height * 255.0) as u8;
+                let g = (100.0 + normalized_height * 155.0) as u8;
+                let b = (0.0 + normalized_height * 255.0) as u8;
+
+                colors.push(r);
+                colors.push(g);
+                colors.push(b);
+                colors.push(255);
+            }
+        }
+
         // Now build raylib mesh
         // WARN: Unsafe block due to raylib C API & raylib-rs FFI impl
         unsafe {
@@ -122,11 +145,13 @@ impl Terrain {
                 libc::malloc(vertices.len() * std::mem::size_of::<f32>()) as *mut f32;
             let indices_ptr = libc::malloc(indices.len() * std::mem::size_of::<u16>()) as *mut u16;
             let normals_ptr = libc::malloc(normals.len() * std::mem::size_of::<f32>()) as *mut f32;
+            let colors_ptr = libc::malloc(colors.len() * std::mem::size_of::<u8>()) as *mut u8;
 
             // Copy
             std::ptr::copy_nonoverlapping(vertices.as_ptr(), vertices_ptr, vertices.len());
             std::ptr::copy_nonoverlapping(indices.as_ptr(), indices_ptr, indices.len());
             std::ptr::copy_nonoverlapping(normals.as_ptr(), normals_ptr, normals.len());
+            std::ptr::copy_nonoverlapping(colors.as_ptr(), colors_ptr, colors.len());
 
             // Construct the mesh
             let mut mesh = ffi::Mesh {
@@ -138,7 +163,7 @@ impl Terrain {
                 // All others are null or 0
                 texcoords: std::ptr::null_mut(),
                 texcoords2: std::ptr::null_mut(),
-                colors: std::ptr::null_mut(),
+                colors: colors_ptr,
                 tangents: std::ptr::null_mut(),
                 animVertices: std::ptr::null_mut(),
                 animNormals: std::ptr::null_mut(),
@@ -156,6 +181,24 @@ impl Terrain {
             // Wrap in Mesh
             Mesh::from_raw(mesh)
         } // WARN: Unsafe end
+    }
+}
+
+impl WorldQuery for Terrain {
+    fn get_height_at(&self, x: f32, z: f32) -> f32 {
+        // world coords to grid indices
+        let offset = TERRAIN_SIZE as f32 / 2.0;
+        let grid_x = ((x + offset) / TERRAIN_RESOLUTION) as i32;
+        let grid_z = ((z + offset) / TERRAIN_RESOLUTION) as i32;
+
+        // Check bounds
+        let grid_size = self.heightmap.len() as i32;
+        if grid_x < 0 || grid_x >= grid_size || grid_z < 0 || grid_z >= grid_size {
+            return 0.0;
+        }
+
+        // Return height at hte grid point
+        self.heightmap[grid_z as usize][grid_x as usize]
     }
 }
 
