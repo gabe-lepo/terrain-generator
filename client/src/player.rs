@@ -4,12 +4,12 @@ use raylib::prelude::*;
 
 // Consts
 const MOVE_SPEED: f32 = 15.0;
-const GRAVITY_FORCE: f32 = 20.0;
-const JUMP_FORCE: f32 = 10.0;
+const GRAVITY_FORCE: f32 = 30.0;
+const JUMP_FORCE: f32 = 15.0;
 const MOUSE_SENSITIVITY: f32 = 0.003;
 const SPRINT_MULTIPLIER: f32 = 2.0;
 const CROUCH_MULTIPLIER: f32 = 0.5;
-const GOD_MODE: bool = false;
+const GOD_MODE: bool = true;
 
 pub struct Player {
     pub position: Vector3,

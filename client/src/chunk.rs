@@ -9,7 +9,6 @@ use raylib::prelude::*;
 // Consts
 pub const CHUNK_SIZE: i32 = 32;
 pub const TERRAIN_RESOLUTION: f32 = 2.5;
-const HEIGHT_SCALE: f32 = 150.0;
 const NOISE_FREQ: f32 = 0.01;
 const LACUNARITY: f64 = 2.0; // Frequency multiplier
 
@@ -60,7 +59,7 @@ impl Chunk {
         biome_system: &BiomeSystem,
     ) -> Self {
         let heightmap = Self::generate_heightmap(coord, noise, seed_offset, biome_system);
-        let mesh = Self::build_mesh(&heightmap);
+        let mesh = Self::build_mesh(coord, &heightmap, biome_system);
         let model = rl
             .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
             .expect("Failed to create model from mesh");
@@ -153,7 +152,11 @@ impl Chunk {
     }
 
     // Private
-    fn build_mesh(heightmap: &Vec<Vec<f32>>) -> Mesh {
+    fn build_mesh(
+        coord: ChunkCoord,
+        heightmap: &Vec<Vec<f32>>,
+        biome_system: &BiomeSystem,
+    ) -> Mesh {
         let grid_size = heightmap.len();
         let vertex_count = grid_size * grid_size;
         let triangle_count = (grid_size - 1) * (grid_size - 1) * 2;
@@ -203,18 +206,38 @@ impl Chunk {
             normals.push(0.0);
         }
 
-        // Gen vertex colors based on height
+        // Gen vertex colors based on height and biome
+        // TODO: This is getting complex, offload to another builder func
         for z in 0..grid_size {
             for x in 0..grid_size {
                 let height = heightmap[z][x];
-                // TODO: Use biome specific height scale
-                let normalized_height = height / HEIGHT_SCALE;
-                let color_height = normalized_height.powf(3.5);
 
-                // Color to white (low to high) gradient
-                let r = (0.0 + color_height * 255.0) as u8;
-                let g = (100.0 + color_height * 155.0) as u8;
-                let b = (0.0 + color_height * 255.0) as u8;
+                // Get world position for the vertex
+                let (chunk_world_x, chunk_world_z) = coord.to_world_pos();
+                let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
+                let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
+
+                // Sample biome at this pos
+                let biome = biome_system.get_biome_at(world_x, world_z);
+
+                // Height-based blend (0-1 normalized)
+                let height_range = biome.height_scale;
+                let height_normalized =
+                    ((height - biome.base_height) / height_range).clamp(0.0, 1.0);
+
+                // Apply power curve to transition
+                let height_curved = height_normalized.powf(biome.color_transition_power);
+
+                // Blend between base and peak color based on height
+                let r = (biome.base_color.r as f32
+                    + (biome.peak_color.r as f32 - biome.base_color.r as f32) * height_curved)
+                    as u8;
+                let g = (biome.base_color.g as f32
+                    + (biome.peak_color.g as f32 - biome.base_color.g as f32) * height_curved)
+                    as u8;
+                let b = (biome.base_color.b as f32
+                    + (biome.peak_color.b as f32 - biome.base_color.b as f32) * height_curved)
+                    as u8;
 
                 colors.push(r);
                 colors.push(g);
