@@ -1,21 +1,32 @@
-// WARN: REMOVE THESE ALLOWS
-// #![allow(dead_code, unused)]
+// WARN: Comment this after building out everything
+#![allow(dead_code, unused)]
 mod biome;
 mod chunk;
+mod network;
 mod player;
+mod remote_player;
 mod shaders;
 mod terrain_manager;
 mod world;
 
+use network::{NetworkEvent, ServerConfig, spawn_network_task};
 use player::Player;
 use raylib::prelude::*;
+use remote_player::RemotePlayer;
 use shaders::ShaderManager;
+use std::collections::HashMap;
 use sysinfo::System;
 use terrain_manager::TerrainManager;
+use uuid::Uuid;
 
 const BACKGROUND_COLOR: Color = Color::DEEPSKYBLUE;
 
 fn main() {
+    // Network setup
+    let server_config = ServerConfig::default(); // Will configure later by user
+    let (network_handle, mut network_events) = spawn_network_task(server_config);
+    let mut remote_players: HashMap<Uuid, RemotePlayer> = HashMap::new();
+
     // sysinfo for memory alloc debugging
     let mut sys = System::new_all();
     let current_pid = sysinfo::get_current_pid().expect("Failed to get PID");
@@ -27,7 +38,7 @@ fn main() {
         .build();
 
     rl_handle.set_target_fps(60);
-    rl_handle.disable_cursor();
+    // rl_handle.disable_cursor();
 
     // Player and terrain setup
     let mut player = Player::new(Vector3::new(0.0, 100.0, 0.0));
@@ -50,8 +61,35 @@ fn main() {
         // Update chunks based on player pos
         terrain_manager.update(player.position, &mut rl_handle, &rl_thread);
 
-        // Update player
         let dt = rl_handle.get_frame_time();
+
+        // Process network events
+        while let Ok(event) = network_events.try_recv() {
+            match event {
+                NetworkEvent::Connected => {
+                    println!("Conneceted to server!");
+                }
+                NetworkEvent::Disconnected => {
+                    println!("Disconnected from server");
+                    remote_players.clear();
+                }
+                NetworkEvent::PlayerPositionUpdate {
+                    player_id,
+                    position,
+                } => {
+                    remote_players
+                        .entry(player_id)
+                        .and_modify(|p| p.update_position(position))
+                        .or_insert_with(|| RemotePlayer::new(player_id, position));
+                }
+            }
+        }
+
+        // Send position to server every frame
+        let client_pos = shared::Vec3::new(player.position.x, player.position.y, player.position.z);
+        network_handle.send_position_update(client_pos);
+
+        // Update player
         player.update(&rl_handle, &terrain_manager, dt);
 
         // Calculate fog settings based on actual view distance
@@ -64,6 +102,7 @@ fn main() {
         {
             // 3D drawing
             let mut draw3d_handle = draw_handle.begin_mode3D(player.get_camera());
+
             terrain_manager.render(
                 &mut draw3d_handle,
                 &player.get_camera(),
@@ -72,6 +111,11 @@ fn main() {
                 fog_far,
                 BACKGROUND_COLOR,
             );
+
+            // Render remote players
+            for remote_player in remote_players.values() {
+                remote_player.render(&mut draw3d_handle);
+            }
         }
 
         draw_stats(&mut draw_handle, &player, used_mb, &terrain_manager);

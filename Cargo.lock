@@ -98,7 +98,12 @@ dependencies = [
  "libc",
  "noise",
  "raylib",
+ "serde",
+ "serde_json",
+ "shared",
  "sysinfo",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
