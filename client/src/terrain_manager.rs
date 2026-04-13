@@ -1,3 +1,4 @@
+use crate::biome::BiomeSystem;
 use crate::chunk::{CHUNK_SIZE, Chunk, ChunkCoord, TERRAIN_RESOLUTION};
 use crate::shaders::ShaderManager;
 use crate::world::WorldQuery;
@@ -7,7 +8,7 @@ use raylib::prelude::*;
 use std::collections::HashMap;
 
 const VIEW_DISTANCE: i32 = 25;
-const RENDER_WIREFRAME: bool = true;
+const RENDER_WIREFRAME: bool = false;
 const MAX_DISTANCE_BUFFER: f32 = 1.5;
 
 pub struct TerrainManager {
@@ -16,12 +17,14 @@ pub struct TerrainManager {
     seed_offset: f64,
     last_player_chunk: Option<ChunkCoord>,
     last_rendered_count: usize,
+    biome_system: BiomeSystem,
 }
 
 impl TerrainManager {
     pub fn new(seed: u32) -> Self {
         let noise = Perlin::new(seed);
         let seed_offset = seed as f64 * 1000.0;
+        let biome_system = BiomeSystem::new(noise, seed_offset);
 
         Self {
             chunks: HashMap::new(),
@@ -29,6 +32,7 @@ impl TerrainManager {
             seed_offset,
             last_player_chunk: None,
             last_rendered_count: 0,
+            biome_system,
         }
     }
 
@@ -54,8 +58,14 @@ impl TerrainManager {
                 // Load chunk if not already
                 if !self.chunks.contains_key(&chunk_coord) {
                     // println!("Loading chunk {:?}", chunk_coord);
-                    let chunk =
-                        Chunk::generate(chunk_coord, &self.noise, self.seed_offset, rl, thread);
+                    let chunk = Chunk::generate(
+                        chunk_coord,
+                        &self.noise,
+                        self.seed_offset,
+                        rl,
+                        thread,
+                        &self.biome_system,
+                    );
                     self.chunks.insert(chunk_coord, chunk);
                 }
             }
@@ -130,7 +140,7 @@ impl TerrainManager {
     // Private
     fn calculate_height_from_noise(&self, x: f32, z: f32) -> f32 {
         use crate::chunk::get_height;
-        get_height(x, z, &self.noise, self.seed_offset)
+        get_height(x, z, &self.noise, self.seed_offset, &self.biome_system)
     }
 
     fn is_chunk_potentially_visible(camera: &Camera3D, chunk: &Chunk) -> bool {

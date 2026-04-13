@@ -1,5 +1,6 @@
 // WARN: REMOVE THESE ALLOWS
 // #![allow(dead_code, unused)]
+mod biome;
 mod chunk;
 mod player;
 mod shaders;

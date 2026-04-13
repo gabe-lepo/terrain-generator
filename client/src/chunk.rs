@@ -1,3 +1,5 @@
+use crate::biome::BiomeSystem;
+
 use std::f32;
 
 use noise::{NoiseFn, Perlin};
@@ -9,9 +11,7 @@ pub const CHUNK_SIZE: i32 = 32;
 pub const TERRAIN_RESOLUTION: f32 = 2.5;
 const HEIGHT_SCALE: f32 = 150.0;
 const NOISE_FREQ: f32 = 0.01;
-const OCTAVES: i32 = 5; // Num layers
 const LACUNARITY: f64 = 2.0; // Frequency multiplier
-const PERSISTENCE: f64 = 0.5; // Amplitude multiplier
 
 /// Chunk coordinates (not world coords!)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,8 +57,9 @@ impl Chunk {
         seed_offset: f64,
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
+        biome_system: &BiomeSystem,
     ) -> Self {
-        let heightmap = Self::generate_heightmap(coord, noise, seed_offset);
+        let heightmap = Self::generate_heightmap(coord, noise, seed_offset, biome_system);
         let mesh = Self::build_mesh(&heightmap);
         let model = rl
             .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
@@ -90,7 +91,12 @@ impl Chunk {
     }
 
     /// Generate heightmap for the chunk
-    fn generate_heightmap(coord: ChunkCoord, noise: &Perlin, seed_offset: f64) -> Vec<Vec<f32>> {
+    fn generate_heightmap(
+        coord: ChunkCoord,
+        noise: &Perlin,
+        seed_offset: f64,
+        biome_system: &BiomeSystem,
+    ) -> Vec<Vec<f32>> {
         let grid_size = CHUNK_SIZE as usize + 1;
         let mut heightmap = Vec::with_capacity(grid_size);
 
@@ -101,7 +107,7 @@ impl Chunk {
             for x in 0..grid_size {
                 let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
                 let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
-                let height = get_height(world_x, world_z, noise, seed_offset);
+                let height = get_height(world_x, world_z, noise, seed_offset, biome_system);
                 row.push(height);
             }
             heightmap.push(row);
@@ -201,6 +207,7 @@ impl Chunk {
         for z in 0..grid_size {
             for x in 0..grid_size {
                 let height = heightmap[z][x];
+                // TODO: Use biome specific height scale
                 let normalized_height = height / HEIGHT_SCALE;
                 let color_height = normalized_height.powf(3.5);
 
@@ -286,13 +293,22 @@ impl Chunk {
 }
 
 /// Fancy terrain gen
-pub fn get_height(x: f32, z: f32, noise: &Perlin, seed_offset: f64) -> f32 {
+pub fn get_height(
+    x: f32,
+    z: f32,
+    noise: &Perlin,
+    seed_offset: f64,
+    biome_system: &BiomeSystem,
+) -> f32 {
+    // Sample biome as this position
+    let biome = biome_system.get_biome_at(x, z);
+
     let mut total = 0.0;
     let mut amplitude = 1.0;
     let mut frequency = NOISE_FREQ as f64;
     let mut max_value = 0.0; // Normalization
 
-    for _ in 0..OCTAVES {
+    for _ in 0..biome.octaves {
         let nx = (x as f64) * frequency + seed_offset;
         let nz = (z as f64) * frequency + seed_offset;
         let noise_val = noise.get([nx, nz]);
@@ -300,12 +316,14 @@ pub fn get_height(x: f32, z: f32, noise: &Perlin, seed_offset: f64) -> f32 {
         total += noise_val * amplitude;
         max_value += amplitude;
 
-        amplitude *= PERSISTENCE;
+        // Biome params
+        amplitude *= biome.persistence as f64;
         frequency *= LACUNARITY;
     }
 
     let normalized = total / max_value;
-    let height = ((normalized + 1.0) / 2.0) * (HEIGHT_SCALE as f64);
+    let height =
+        biome.base_height as f64 + ((normalized + 1.0) / 2.0) * (biome.height_scale as f64);
 
     height as f32
 }

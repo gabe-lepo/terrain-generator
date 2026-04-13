@@ -3,7 +3,7 @@ use crate::world::WorldQuery;
 use raylib::prelude::*;
 
 // Consts
-const MOVE_SPEED: f32 = 5.0;
+const MOVE_SPEED: f32 = 15.0;
 const GRAVITY_FORCE: f32 = 20.0;
 const JUMP_FORCE: f32 = 10.0;
 const MOUSE_SENSITIVITY: f32 = 0.003;
