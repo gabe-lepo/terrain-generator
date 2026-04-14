@@ -1,3 +1,5 @@
+use crate::config::{CONNECT, POSITION_UPDATE_RATE_HZ, POSITION_ROUND_DECIMALS};
+
 use shared::{ClientMessage, ServerMessage, Vec3};
 use std::net::Ipv4Addr;
 use std::sync::Arc;
@@ -7,11 +9,6 @@ use tokio::{
     sync::mpsc,
 };
 use uuid::Uuid;
-
-// Configs
-const POSITION_UPDATE_RATE_HZ: f32 = 20.0;
-const POSITION_COORD_ROUND_DECIMAL: i32 = 2;
-const CONNECT: bool = false;
 
 /// Configuration for server connection, will be user config later
 pub struct ServerConfig {
@@ -78,33 +75,39 @@ async fn network_task(
     event_tx: mpsc::UnboundedSender<NetworkEvent>,
     mut cmd_rx: mpsc::UnboundedReceiver<ClientMessage>,
 ) {
-    if CONNECT {
+    if !CONNECT {
+        println!("Network connection disabled (CONNECT=false)");
+        // Keep task alive but do nothing
         loop {
-            // Connect
-            let addr = format!("{}:{}", config.address, config.port);
-            println!("Connecting to server at {}", addr);
-
-            match TcpStream::connect(&addr).await {
-                Ok(stream) => {
-                    println!("Connected to server!");
-                    let _ = event_tx.send(NetworkEvent::Connected);
-
-                    // Handle connection
-                    if let Err(e) = handle_connection(stream, &event_tx, &mut cmd_rx).await {
-                        println!("Connection error: {e}");
-                    }
-
-                    let _ = event_tx.send(NetworkEvent::Disconnected);
-                }
-                Err(e) => {
-                    println!("Failed to connect: {e}");
-                }
-            }
-
-            // Wait before reconnecting
-            println!("Reconnecting in 3 seconds...");
-            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
         }
+    }
+
+    loop {
+        // Connect
+        let addr = format!("{}:{}", config.address, config.port);
+        println!("Connecting to server at {}", addr);
+
+        match TcpStream::connect(&addr).await {
+            Ok(stream) => {
+                println!("Connected to server!");
+                let _ = event_tx.send(NetworkEvent::Connected);
+
+                // Handle connection
+                if let Err(e) = handle_connection(stream, &event_tx, &mut cmd_rx).await {
+                    println!("Connection error: {e}");
+                }
+
+                let _ = event_tx.send(NetworkEvent::Disconnected);
+            }
+            Err(e) => {
+                println!("Failed to connect: {e}");
+            }
+        }
+
+        // Wait before reconnecting
+        println!("Reconnecting in 3 seconds...");
+        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
     }
 }
 
@@ -179,7 +182,7 @@ pub fn should_send_position_update(last_update_time: &mut f32, dt: f32) -> bool 
 
 /// Round posiiton coordinates
 pub fn round_position(position: Vec3) -> Vec3 {
-    let multiplier = 10_f32.powi(POSITION_COORD_ROUND_DECIMAL);
+    let multiplier = 10_f32.powi(POSITION_ROUND_DECIMALS as i32);
     Vec3::new(
         (position.x * multiplier).round() / multiplier,
         (position.y * multiplier).round() / multiplier,

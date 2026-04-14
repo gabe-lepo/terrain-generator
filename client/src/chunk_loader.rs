@@ -1,5 +1,5 @@
 use crate::biome::{self, BiomeSystem};
-use crate::chunk::{CHUNK_SIZE, TERRAIN_RESOLUTION};
+use crate::config::{CHUNK_SIZE, TERRAIN_RESOLUTION, NOISE_FREQ, LACUNARITY, SEED};
 use crate::world;
 use libc::chflags;
 use noise::{NoiseFn, Perlin};
@@ -32,7 +32,7 @@ pub struct ChunkLoader {
 
 impl ChunkLoader {
     /// Create new chunk loader with dedicated runtime
-    pub fn new(noise: Perlin, biome_system: BiomeSystem, seed_offset: f64) -> Self {
+    pub fn new(noise: Perlin, biome_system: BiomeSystem) -> Self {
         let (request_tx, mut request_rx) = mpsc::unbounded_channel::<ChunkRequest>();
         let (completed_tx, completed_rx) = mpsc::unbounded_channel::<ChunkData>();
 
@@ -49,7 +49,7 @@ impl ChunkLoader {
                 .expect("Failed to create chunk loader runtime");
 
             rt.block_on(async move {
-                chunk_loader_task(request_rx, completed_tx, noise, biome_system, seed_offset).await;
+                chunk_loader_task(request_rx, completed_tx, noise, biome_system).await;
             });
         });
 
@@ -78,7 +78,6 @@ async fn chunk_loader_task(
     completed_tx: mpsc::UnboundedSender<ChunkData>,
     noise: Arc<Perlin>,
     biome_system: Arc<BiomeSystem>,
-    seed_offset: f64,
 ) {
     while let Some(request) = request_rx.recv().await {
         let noise = Arc::clone(&noise);
@@ -90,7 +89,7 @@ async fn chunk_loader_task(
             // TODO: Generate heightmap, vertices, indices, colors, bbox
             // This is where we move the chunk gen logic
 
-            let chunk_data = generate_chunk_data(request.coord, &noise, &biome_system, seed_offset);
+            let chunk_data = generate_chunk_data(request.coord, &noise, &biome_system);
             if let Err(err) = completed_tx.send(chunk_data) {
                 println!("Error sending completed chunk data! {:?}", err);
             }
@@ -103,10 +102,9 @@ fn generate_chunk_data(
     coord: (i32, i32),
     noise: &Perlin,
     biome_system: &BiomeSystem,
-    seed_offset: f64,
 ) -> ChunkData {
     // Generate heightmap
-    let heightmap = generate_heightmap(coord, noise, seed_offset, biome_system);
+    let heightmap = generate_heightmap(coord, noise, biome_system);
 
     // Build mesh data
     let (vertices, indices, colors) = build_mesh_data(coord, &heightmap, biome_system);
@@ -126,7 +124,6 @@ fn generate_chunk_data(
 fn generate_heightmap(
     coord: (i32, i32),
     noise: &Perlin,
-    seed_offset: f64,
     biome_system: &BiomeSystem,
 ) -> Vec<Vec<f32>> {
     let grid_size = CHUNK_SIZE as usize + 1;
@@ -141,7 +138,7 @@ fn generate_heightmap(
         for x in 0..grid_size {
             let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
             let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
-            let height = get_height(world_x, world_z, noise, seed_offset, biome_system);
+            let height = get_height(world_x, world_z, noise, biome_system);
             row.push(height);
         }
         heightmap.push(row);
@@ -150,10 +147,8 @@ fn generate_heightmap(
     heightmap
 }
 
-fn get_height(x: f32, z: f32, noise: &Perlin, seed_offset: f64, biome_system: &BiomeSystem) -> f32 {
-    const NOISE_FREQ: f32 = 0.01;
-    const LACUNARITY: f64 = 2.0;
-
+fn get_height(x: f32, z: f32, noise: &Perlin, biome_system: &BiomeSystem) -> f32 {
+    let seed_offset = SEED as f64 * 1000.0;
     let biome = biome_system.get_biome_at(x, z);
 
     let mut total = 0.0;

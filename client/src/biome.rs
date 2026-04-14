@@ -1,7 +1,7 @@
+use crate::config::{BIOME_FREQ, MOUNTAINS, PLAINS, HILLS, SEED};
+
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
-
-const BIOME_FREQ: f64 = 0.0005; // Lower the larger the region
 
 /// Color power:
 /// < 1.0: favors peak color
@@ -42,21 +42,20 @@ impl BiomeParams {
 #[derive(Clone)]
 pub struct BiomeSystem {
     noise: Perlin,
-    seed_offset: f64,
 }
 
 impl BiomeSystem {
-    pub fn new(noise: Perlin, seed_offset: f64) -> Self {
+    pub fn new(noise: Perlin) -> Self {
         Self {
             noise,
-            seed_offset: seed_offset + 10000.0,
         }
     }
 
     /// Sample biome at given world pos
     pub fn get_biome_at(&self, x: f32, z: f32) -> BiomeParams {
-        let biome_x = (x as f64) * BIOME_FREQ + self.seed_offset;
-        let biome_z = (z as f64) * BIOME_FREQ + self.seed_offset;
+        let seed_offset = (SEED as f64 * 1000.0) + 10000.0;
+        let biome_x = (x as f64) * BIOME_FREQ + seed_offset;
+        let biome_z = (z as f64) * BIOME_FREQ + seed_offset;
         let biome_value = self.noise.get([biome_x, biome_z]);
 
         // blend biomes based on noise val
@@ -117,40 +116,40 @@ impl BiomeSystem {
         )
     }
 
-    // Define biome presets as assc funcs
+    // Define biome presets from config
     fn mountains() -> BiomeParams {
         BiomeParams::new(
-            300.0,
-            75.0,
-            6,
-            0.5,
-            Color::new(100, 100, 100, 255),
-            Color::new(240, 240, 255, 255),
-            3.5,
+            MOUNTAINS.height_scale,
+            MOUNTAINS.base_height,
+            MOUNTAINS.octaves,
+            MOUNTAINS.persistence,
+            MOUNTAINS.base_color,
+            MOUNTAINS.peak_color,
+            MOUNTAINS.color_power,
         )
     }
 
     fn hills() -> BiomeParams {
         BiomeParams::new(
-            75.0,
-            5.0,
-            2,
-            0.1,
-            Color::new(50, 150, 50, 255),
-            Color::new(100, 180, 100, 255),
-            1.0,
+            HILLS.height_scale,
+            HILLS.base_height,
+            HILLS.octaves,
+            HILLS.persistence,
+            HILLS.base_color,
+            HILLS.peak_color,
+            HILLS.color_power,
         )
     }
 
     fn plains() -> BiomeParams {
         BiomeParams::new(
-            5.0,
-            0.0,
-            2,
-            0.001,
-            Color::new(200, 180, 100, 255),
-            Color::new(220, 200, 130, 255),
-            0.3,
+            PLAINS.height_scale,
+            PLAINS.base_height,
+            PLAINS.octaves,
+            PLAINS.persistence,
+            PLAINS.base_color,
+            PLAINS.peak_color,
+            PLAINS.color_power,
         )
     }
 }

@@ -1,6 +1,10 @@
 use crate::biome::BiomeSystem;
-use crate::chunk::{CHUNK_SIZE, Chunk, ChunkCoord, TERRAIN_RESOLUTION};
+use crate::chunk::{Chunk, ChunkCoord};
 use crate::chunk_loader::{ChunkData, ChunkLoader};
+use crate::config::{
+    CHUNK_SIZE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT, MAX_DISTANCE_BUFFER, RENDER_WIREFRAME,
+    TERRAIN_RESOLUTION, VIEW_DISTANCE, SEED,
+};
 use crate::shaders::ShaderManager;
 use crate::world::WorldQuery;
 
@@ -8,14 +12,9 @@ use noise::Perlin;
 use raylib::prelude::*;
 use std::collections::{HashMap, HashSet};
 
-const VIEW_DISTANCE: i32 = 25;
-const RENDER_WIREFRAME: bool = false;
-const MAX_DISTANCE_BUFFER: f32 = 2.0;
-
 pub struct TerrainManager {
     chunks: HashMap<ChunkCoord, Chunk>,
     noise: Perlin,
-    seed_offset: f64,
     last_player_chunk: Option<ChunkCoord>,
     last_rendered_count: usize,
     biome_system: BiomeSystem,
@@ -24,18 +23,17 @@ pub struct TerrainManager {
 }
 
 impl TerrainManager {
-    pub fn new(seed: u32) -> Self {
-        let noise = Perlin::new(seed);
-        let seed_offset = seed as f64 * 1000.0;
-        let biome_system = BiomeSystem::new(noise, seed_offset);
+    pub fn new() -> Self {
+        let noise = Perlin::new(SEED);
+        let seed_offset = SEED as f64 * 1000.0;
+        let biome_system = BiomeSystem::new(noise);
 
         // Create chunk loaded with shared noise and biome sys
-        let chunk_loader = ChunkLoader::new(noise, biome_system.clone(), seed_offset);
+        let chunk_loader = ChunkLoader::new(noise, biome_system.clone());
 
         Self {
             chunks: HashMap::new(),
             noise,
-            seed_offset,
             last_player_chunk: None,
             last_rendered_count: 0,
             biome_system,
@@ -138,8 +136,8 @@ impl TerrainManager {
         // Max render distance in world units
         let max_distance = (VIEW_DISTANCE as f32) * (CHUNK_SIZE as f32) * TERRAIN_RESOLUTION;
 
-        let fog_near = max_distance * 0.6;
-        let fog_far = max_distance * 0.8;
+        let fog_near = max_distance * FOG_NEAR_PERCENT;
+        let fog_far = max_distance * FOG_FAR_PERCENT;
 
         (fog_near, fog_far)
     }
@@ -147,7 +145,7 @@ impl TerrainManager {
     // Private
     fn calculate_height_from_noise(&self, x: f32, z: f32) -> f32 {
         use crate::chunk::get_height;
-        get_height(x, z, &self.noise, self.seed_offset, &self.biome_system)
+        get_height(x, z, &self.noise, &self.biome_system)
     }
 
     fn is_chunk_potentially_visible(camera: &Camera3D, chunk: &Chunk) -> bool {

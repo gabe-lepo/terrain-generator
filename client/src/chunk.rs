@@ -1,17 +1,12 @@
 use crate::biome::BiomeSystem;
 use crate::chunk_loader::ChunkData;
+use crate::config::{CHUNK_SIZE, TERRAIN_RESOLUTION, NOISE_FREQ, LACUNARITY, SEED};
 
 use std::f32;
 
 use noise::{NoiseFn, Perlin};
 use raylib::ffi;
 use raylib::prelude::*;
-
-// Consts
-pub const CHUNK_SIZE: i32 = 16;
-pub const TERRAIN_RESOLUTION: f32 = 2.5;
-const NOISE_FREQ: f64 = 0.01;
-const LACUNARITY: f64 = 2.0;
 
 /// Chunk coordinates (not world coords!)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -54,12 +49,11 @@ impl Chunk {
     pub fn generate(
         coord: ChunkCoord,
         noise: &Perlin,
-        seed_offset: f64,
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
         biome_system: &BiomeSystem,
     ) -> Self {
-        let heightmap = Self::generate_heightmap(coord, noise, seed_offset, biome_system);
+        let heightmap = Self::generate_heightmap(coord, noise, biome_system);
         let mesh = Self::build_mesh(coord, &heightmap, biome_system);
         let model = rl
             .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
@@ -192,7 +186,6 @@ impl Chunk {
     fn generate_heightmap(
         coord: ChunkCoord,
         noise: &Perlin,
-        seed_offset: f64,
         biome_system: &BiomeSystem,
     ) -> Vec<Vec<f32>> {
         let grid_size = CHUNK_SIZE as usize + 1;
@@ -205,7 +198,7 @@ impl Chunk {
             for x in 0..grid_size {
                 let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
                 let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
-                let height = get_height(world_x, world_z, noise, seed_offset, biome_system);
+                let height = get_height(world_x, world_z, noise, biome_system);
                 row.push(height);
             }
             heightmap.push(row);
@@ -419,9 +412,10 @@ pub fn get_height(
     x: f32,
     z: f32,
     noise: &Perlin,
-    seed_offset: f64,
     biome_system: &BiomeSystem,
 ) -> f32 {
+    let seed_offset = SEED as f64 * 1000.0;
+
     // Sample biome as this position
     let biome = biome_system.get_biome_at(x, z);
 

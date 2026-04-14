@@ -3,6 +3,7 @@
 mod biome;
 mod chunk;
 mod chunk_loader;
+mod config;
 mod network;
 mod player;
 mod remote_player;
@@ -11,6 +12,7 @@ mod terrain_manager;
 mod world;
 
 use chunk_loader::*;
+use config::SEED;
 use network::{
     NetworkEvent, ServerConfig, round_position, should_send_position_update, spawn_network_task,
 };
@@ -47,7 +49,7 @@ fn main() {
 
     // Player and terrain setup
     let mut player = Player::new(Vector3::new(0.0, 100.0, 0.0));
-    let mut terrain_manager = TerrainManager::new(12345);
+    let mut terrain_manager = TerrainManager::new();
 
     // Shader setup
     let mut shader_manager = ShaderManager::new();
