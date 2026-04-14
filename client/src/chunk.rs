@@ -8,10 +8,10 @@ use raylib::ffi;
 use raylib::prelude::*;
 
 // Consts
-pub const CHUNK_SIZE: i32 = 32;
+pub const CHUNK_SIZE: i32 = 16;
 pub const TERRAIN_RESOLUTION: f32 = 2.5;
-const NOISE_FREQ: f32 = 0.01;
-const LACUNARITY: f64 = 2.0; // Frequency multiplier
+const NOISE_FREQ: f64 = 0.01;
+const LACUNARITY: f64 = 2.0;
 
 /// Chunk coordinates (not world coords!)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -74,7 +74,12 @@ impl Chunk {
         }
     }
 
-    pub fn from_data(data: ChunkData, rl: &mut RaylibHandle, thread: &RaylibThread) -> Self {
+    pub fn from_data(
+        data: ChunkData,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        fog_shader: Option<&Shader>,
+    ) -> Self {
         let coord = ChunkCoord::new(data.coord.0, data.coord.1);
         let vertices = data.vertices;
         let indices = data.indices;
@@ -143,9 +148,17 @@ impl Chunk {
             Mesh::from_raw(mesh)
         };
 
-        let model = rl
+        let mut model = rl
             .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
             .expect("Failed to create model from mesh");
+
+        // Set fog shader on the model's material if provided
+        if let Some(shader) = fog_shader {
+            let materials = model.materials_mut();
+            if let Some(material) = materials.get_mut(0) {
+                material.as_mut().shader = shader.as_ref().clone();
+            }
+        }
 
         // We dont need to recalc heightmap since we wont use it for height queries
         // Height queries will fall back to noise for async loaded chunks
@@ -166,10 +179,12 @@ impl Chunk {
         let (world_x, world_z) = self.coord.to_world_pos();
         let position = Vector3::new(world_x, 0.0, world_z);
 
-        d.draw_model(&self.model, position, 1.0, Color::WHITE);
-
         if render_wireframe {
+            // Wireframe only - no fog possible on lines
             d.draw_model_wires(&self.model, position, 1.0, Color::BLACK);
+        } else {
+            // Solid model with fog shader applied via material
+            d.draw_model(&self.model, position, 1.0, Color::WHITE);
         }
     }
 
@@ -412,7 +427,7 @@ pub fn get_height(
 
     let mut total = 0.0;
     let mut amplitude = 1.0;
-    let mut frequency = NOISE_FREQ as f64;
+    let mut frequency = NOISE_FREQ;
     let mut max_value = 0.0; // Normalization
 
     for _ in 0..biome.octaves {

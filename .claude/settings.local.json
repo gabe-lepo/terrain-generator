@@ -3,7 +3,9 @@
     "allow": [
       "WebFetch(domain:docs.rs)",
       "Bash(cargo run:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(timeout 10 cargo run -p client)",
+      "Read(//tmp/**)"
     ]
   }
 }

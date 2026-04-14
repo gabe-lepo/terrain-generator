@@ -94,13 +94,23 @@ impl ShaderManager {
         self.fog_shader.as_ref()
     }
 
+    pub fn get_fog_shader_mut(&mut self) -> Option<&mut Shader> {
+        self.fog_shader.as_mut()
+    }
+
     // Private
     fn load_fog_shader(rl: &mut RaylibHandle, thread: &RaylibThread) -> Option<Shader> {
-        let vs_path = "shaders/fog.vs";
-        let fs_path = "shaders/fog.fs";
+        // Use absolute path from manifest directory so it works regardless of CWD
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let vs_path = format!("{}/shaders/fog.vs", manifest_dir);
+        let fs_path = format!("{}/shaders/fog.fs", manifest_dir);
 
-        let shader = rl.load_shader(thread, Some(vs_path), Some(fs_path));
-        println!("Fog shader loaded successfully");
+        println!("Loading shaders from:");
+        println!("  Vertex: {}", vs_path);
+        println!("  Fragment: {}", fs_path);
+
+        let shader = rl.load_shader(thread, Some(&vs_path), Some(&fs_path));
+        println!("Fog shader loaded (otherwise the underlying FFI would've crashed...)");
 
         Some(shader)
     }

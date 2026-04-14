@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 const VIEW_DISTANCE: i32 = 25;
 const RENDER_WIREFRAME: bool = false;
-const MAX_DISTANCE_BUFFER: f32 = 1.5;
+const MAX_DISTANCE_BUFFER: f32 = 2.0;
 
 pub struct TerrainManager {
     chunks: HashMap<ChunkCoord, Chunk>,
@@ -45,7 +45,13 @@ impl TerrainManager {
     }
 
     /// Update which chunks are loaded based on player pos
-    pub fn update(&mut self, player_pos: Vector3, rl: &mut RaylibHandle, thread: &RaylibThread) {
+    pub fn update(
+        &mut self,
+        player_pos: Vector3,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        fog_shader: Option<&Shader>,
+    ) {
         let current_chunk = ChunkCoord::from_world_pos(player_pos.x, player_pos.z);
 
         // Poll for completed chunks and upload to gpu
@@ -53,7 +59,9 @@ impl TerrainManager {
             let coord = ChunkCoord::new(chunk_data.coord.0, chunk_data.coord.1);
 
             // Build final chunk with gpu upload
-            let chunk = Chunk::from_data(chunk_data, rl, thread);
+            // Don't apply fog shader in wireframe mode
+            let shader = if RENDER_WIREFRAME { None } else { fog_shader };
+            let chunk = Chunk::from_data(chunk_data, rl, thread, shader);
             self.chunks.insert(coord, chunk);
             self.pending_chunks.remove(&coord);
         }
@@ -103,20 +111,8 @@ impl TerrainManager {
     ) {
         let mut rendered_count = 0;
 
-        // Set shader on all chunk models if provided
-        if !RENDER_WIREFRAME {
-            if let Some(shader) = shader_manager.get_fog_shader() {
-                // Set fog shader on each chunks material
-                for chunk in self.chunks.values_mut() {
-                    let materials = chunk.model.materials_mut();
-                    if let Some(material) = materials.get_mut(0) {
-                        material.as_mut().shader = shader.as_ref().clone();
-                    }
-                }
-
-                shader_manager.update_fog_shader(camera, fog_near, fog_far, fog_color);
-            }
-        }
+        // Update shader uniforms once before rendering (shaders already set on chunk materials)
+        shader_manager.update_fog_shader(camera, fog_near, fog_far, fog_color);
 
         // Render chunks
         for chunk in self.chunks.values() {
@@ -142,8 +138,8 @@ impl TerrainManager {
         // Max render distance in world units
         let max_distance = (VIEW_DISTANCE as f32) * (CHUNK_SIZE as f32) * TERRAIN_RESOLUTION;
 
-        let fog_near = max_distance * 0.4;
-        let fog_far = max_distance * 0.5;
+        let fog_near = max_distance * 0.6;
+        let fog_far = max_distance * 0.8;
 
         (fog_near, fog_far)
     }

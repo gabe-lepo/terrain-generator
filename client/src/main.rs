@@ -42,6 +42,7 @@ fn main() {
         .build();
 
     rl_handle.set_target_fps(60);
+    rl_handle.set_trace_log(TraceLogLevel::LOG_WARNING); // Suppress raylib INFO logs
     rl_handle.disable_cursor();
 
     // Player and terrain setup
@@ -65,8 +66,9 @@ fn main() {
             0.0
         };
 
-        // Update chunks based on player pos
-        terrain_manager.update(player.position, &mut rl_handle, &rl_thread);
+        // Update chunks based on player pos (pass fog shader so new chunks get it applied)
+        let fog_shader = shader_manager.get_fog_shader();
+        terrain_manager.update(player.position, &mut rl_handle, &rl_thread, fog_shader);
 
         let dt = rl_handle.get_frame_time();
 
