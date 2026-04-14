@@ -1,4 +1,5 @@
 use crate::biome::BiomeSystem;
+use crate::chunk_loader::ChunkData;
 
 use std::f32;
 
@@ -69,6 +70,89 @@ impl Chunk {
             coord,
             model,
             heightmap,
+            bounding_box,
+        }
+    }
+
+    pub fn from_data(data: ChunkData, rl: &mut RaylibHandle, thread: &RaylibThread) -> Self {
+        let coord = ChunkCoord::new(data.coord.0, data.coord.1);
+        let vertices = data.vertices;
+        let indices = data.indices;
+        let colors = data.colors;
+        let bounding_box = data.bounding_box;
+
+        // WARN: Unsafe FFI calls
+        // Build mesh from pre-generated data
+        let mesh = unsafe {
+            let vertex_count = vertices.len() as i32;
+            let triangle_count = (indices.len() / 3) as i32;
+
+            // Alloc mem for mesh data
+            let vertices_flat: Vec<f32> =
+                vertices.iter().flat_map(|v| vec![v.x, v.y, v.z]).collect();
+
+            let colors_flat: Vec<u8> = colors
+                .iter()
+                .flat_map(|c| vec![c.r, c.g, c.b, c.a])
+                .collect();
+
+            // Normals (simple up pointing for now)
+            let normals_flat: Vec<f32> = (0..vertices.len())
+                .flat_map(|_| vec![0.0, 1.0, 0.0])
+                .collect();
+
+            // Copy
+            let vertices_ptr =
+                libc::malloc(vertices_flat.len() * std::mem::size_of::<f32>()) as *mut f32;
+            let indices_ptr = libc::malloc(indices.len() * std::mem::size_of::<u16>()) as *mut u16;
+            let normals_ptr =
+                libc::malloc(normals_flat.len() * std::mem::size_of::<f32>()) as *mut f32;
+            let colors_ptr = libc::malloc(colors_flat.len() * std::mem::size_of::<u8>()) as *mut u8;
+
+            std::ptr::copy_nonoverlapping(
+                vertices_flat.as_ptr(),
+                vertices_ptr,
+                vertices_flat.len(),
+            );
+            std::ptr::copy_nonoverlapping(indices.as_ptr(), indices_ptr, indices.len());
+            std::ptr::copy_nonoverlapping(normals_flat.as_ptr(), normals_ptr, normals_flat.len());
+            std::ptr::copy_nonoverlapping(colors_flat.as_ptr(), colors_ptr, colors_flat.len());
+
+            let mut mesh = ffi::Mesh {
+                vertexCount: vertex_count,
+                triangleCount: triangle_count,
+                vertices: vertices_ptr,
+                indices: indices_ptr,
+                normals: normals_ptr,
+                colors: colors_ptr,
+                texcoords: std::ptr::null_mut(),
+                texcoords2: std::ptr::null_mut(),
+                tangents: std::ptr::null_mut(),
+                animVertices: std::ptr::null_mut(),
+                animNormals: std::ptr::null_mut(),
+                boneIds: std::ptr::null_mut(),
+                boneWeights: std::ptr::null_mut(),
+                boneMatrices: std::ptr::null_mut(),
+                boneCount: 0,
+                vaoId: 0,
+                vboId: std::ptr::null_mut(),
+            };
+
+            // Upload to GPU
+            ffi::UploadMesh(&mut mesh, false);
+            Mesh::from_raw(mesh)
+        };
+
+        let model = rl
+            .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
+            .expect("Failed to create model from mesh");
+
+        // We dont need to recalc heightmap since we wont use it for height queries
+        // Height queries will fall back to noise for async loaded chunks
+        Self {
+            coord,
+            model,
+            heightmap: vec![], // We dont need it
             bounding_box,
         }
     }

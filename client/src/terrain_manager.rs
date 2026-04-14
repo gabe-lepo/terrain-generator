@@ -1,11 +1,12 @@
 use crate::biome::BiomeSystem;
 use crate::chunk::{CHUNK_SIZE, Chunk, ChunkCoord, TERRAIN_RESOLUTION};
+use crate::chunk_loader::{ChunkData, ChunkLoader};
 use crate::shaders::ShaderManager;
 use crate::world::WorldQuery;
 
 use noise::Perlin;
 use raylib::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const VIEW_DISTANCE: i32 = 25;
 const RENDER_WIREFRAME: bool = false;
@@ -18,6 +19,8 @@ pub struct TerrainManager {
     last_player_chunk: Option<ChunkCoord>,
     last_rendered_count: usize,
     biome_system: BiomeSystem,
+    chunk_loader: ChunkLoader,
+    pending_chunks: HashSet<ChunkCoord>,
 }
 
 impl TerrainManager {
@@ -26,6 +29,9 @@ impl TerrainManager {
         let seed_offset = seed as f64 * 1000.0;
         let biome_system = BiomeSystem::new(noise, seed_offset);
 
+        // Create chunk loaded with shared noise and biome sys
+        let chunk_loader = ChunkLoader::new(noise, biome_system.clone(), seed_offset);
+
         Self {
             chunks: HashMap::new(),
             noise,
@@ -33,6 +39,8 @@ impl TerrainManager {
             last_player_chunk: None,
             last_rendered_count: 0,
             biome_system,
+            chunk_loader,
+            pending_chunks: HashSet::new(),
         }
     }
 
@@ -40,7 +48,18 @@ impl TerrainManager {
     pub fn update(&mut self, player_pos: Vector3, rl: &mut RaylibHandle, thread: &RaylibThread) {
         let current_chunk = ChunkCoord::from_world_pos(player_pos.x, player_pos.z);
 
+        // Poll for completed chunks and upload to gpu
+        while let Some(chunk_data) = self.chunk_loader.poll_completed() {
+            let coord = ChunkCoord::new(chunk_data.coord.0, chunk_data.coord.1);
+
+            // Build final chunk with gpu upload
+            let chunk = Chunk::from_data(chunk_data, rl, thread);
+            self.chunks.insert(coord, chunk);
+            self.pending_chunks.remove(&coord);
+        }
+
         // Only update chunks if player moved to different chunk
+        // PERF: There may be a better way to trigger chunk load
         if self.last_player_chunk == Some(current_chunk) {
             return;
         }
@@ -55,30 +74,22 @@ impl TerrainManager {
                 let chunk_coord = ChunkCoord::new(current_chunk.x + dx, current_chunk.z + dz);
                 chunks_to_keep.insert(chunk_coord);
 
-                // Load chunk if not already
-                if !self.chunks.contains_key(&chunk_coord) {
-                    // println!("Loading chunk {:?}", chunk_coord);
-                    let chunk = Chunk::generate(
-                        chunk_coord,
-                        &self.noise,
-                        self.seed_offset,
-                        rl,
-                        thread,
-                        &self.biome_system,
-                    );
-                    self.chunks.insert(chunk_coord, chunk);
+                // Request which chunks should load
+                if !self.chunks.contains_key(&chunk_coord)
+                    && !self.pending_chunks.contains(&chunk_coord)
+                {
+                    self.chunk_loader
+                        .request_chunk((chunk_coord.x, chunk_coord.z));
+                    self.pending_chunks.insert(chunk_coord);
                 }
             }
         }
 
         // Unload chunks outside view distance
-        self.chunks.retain(|coord, _| {
-            let should_keep = chunks_to_keep.contains(coord);
-            if !should_keep {
-                // println!("Unloading chunk {:?}", coord);
-            }
-            should_keep
-        });
+        self.chunks
+            .retain(|coord, _| chunks_to_keep.contains(coord));
+        self.pending_chunks
+            .retain(|coord| chunks_to_keep.contains(coord));
     }
 
     pub fn render(

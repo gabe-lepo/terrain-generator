@@ -39,6 +39,7 @@ impl BiomeParams {
     }
 }
 
+#[derive(Clone)]
 pub struct BiomeSystem {
     noise: Perlin,
     seed_offset: f64,

@@ -11,6 +11,7 @@ use uuid::Uuid;
 // Configs
 const POSITION_UPDATE_RATE_HZ: f32 = 20.0;
 const POSITION_COORD_ROUND_DECIMAL: i32 = 2;
+const CONNECT: bool = false;
 
 /// Configuration for server connection, will be user config later
 pub struct ServerConfig {
@@ -77,31 +78,33 @@ async fn network_task(
     event_tx: mpsc::UnboundedSender<NetworkEvent>,
     mut cmd_rx: mpsc::UnboundedReceiver<ClientMessage>,
 ) {
-    loop {
-        // Connect
-        let addr = format!("{}:{}", config.address, config.port);
-        println!("Connecting to server at {}", addr);
+    if CONNECT {
+        loop {
+            // Connect
+            let addr = format!("{}:{}", config.address, config.port);
+            println!("Connecting to server at {}", addr);
 
-        match TcpStream::connect(&addr).await {
-            Ok(stream) => {
-                println!("Connected to server!");
-                let _ = event_tx.send(NetworkEvent::Connected);
+            match TcpStream::connect(&addr).await {
+                Ok(stream) => {
+                    println!("Connected to server!");
+                    let _ = event_tx.send(NetworkEvent::Connected);
 
-                // Handle connection
-                if let Err(e) = handle_connection(stream, &event_tx, &mut cmd_rx).await {
-                    println!("Connection error: {e}");
+                    // Handle connection
+                    if let Err(e) = handle_connection(stream, &event_tx, &mut cmd_rx).await {
+                        println!("Connection error: {e}");
+                    }
+
+                    let _ = event_tx.send(NetworkEvent::Disconnected);
                 }
+                Err(e) => {
+                    println!("Failed to connect: {e}");
+                }
+            }
 
-                let _ = event_tx.send(NetworkEvent::Disconnected);
-            }
-            Err(e) => {
-                println!("Failed to connect: {e}");
-            }
+            // Wait before reconnecting
+            println!("Reconnecting in 3 seconds...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
         }
-
-        // Wait before reconnecting
-        println!("Reconnecting in 3 seconds...");
-        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
     }
 }
 
