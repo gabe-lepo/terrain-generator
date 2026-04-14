@@ -82,6 +82,10 @@ fn main() {
                         .and_modify(|p| p.update_position(position))
                         .or_insert_with(|| RemotePlayer::new(player_id, position));
                 }
+                NetworkEvent::PlayerDisconnected { player_id } => {
+                    remote_players.remove(&player_id);
+                    println!("Player {} disconnected", player_id);
+                }
             }
         }
 

@@ -6,9 +6,9 @@ use uuid::Uuid;
 pub struct Client {
     pub id: Uuid,
     pub session: u32,
-    pub addr: SocketAddr,
+    pub _addr: SocketAddr,
     pub tx: mpsc::Sender<String>,
-    pub player: Player,
+    pub _player: Player,
 }
 
 impl Client {
@@ -16,9 +16,9 @@ impl Client {
         Self {
             id: Self::derive_id(addr),
             session,
-            addr,
+            _addr: addr,
             tx,
-            player: Player::new(),
+            _player: Player::new(),
         }
     }
 

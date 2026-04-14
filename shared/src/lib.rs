@@ -11,6 +11,7 @@ pub enum ClientMessage {
 #[serde(tag = "type")]
 pub enum ServerMessage {
     PositionUpdate { player_id: Uuid, position: Vec3 },
+    PlayerDisconnected { player_id: Uuid },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

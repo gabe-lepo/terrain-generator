@@ -84,34 +84,42 @@ async fn handle_connection(
                 match result {
                     Ok(0) => {
                         println!("Client {client_id} disconnected\n");
+                        let msg = ServerMessage::PlayerDisconnected {player_id: client_id};
+                        let serialized = serde_json::to_string(&msg).expect("player disconnect message serialization failure") + "\n";
+
                         let mut registry_guard = registry.lock().expect("registry_guard lock failure (inner - Ok0)");
+                        for other in registry_guard.iter().filter(|c| c.id != client_id) {
+                            // TODO: Handle Result<> from try_send properly...
+                            let _  = other.tx.try_send(serialized.clone());
+                        }
                         registry_guard.retain(|c| c.id != client_id);
                         break;
                     }
                     Ok(_) => {
                         let trimmed = line.trim();
-                        match serde_json::from_str::<ClientMessage>(trimmed) {
-                            Ok(ClientMessage::PositionUpdate {position}) => {
-                                let msg = ServerMessage::PositionUpdate {
-                                    player_id: client_id,
-                                    position,
-                                };
-                                let serialized = serde_json::to_string(&msg).expect("serialization failure") + "\n";
-                                let registry_guard = registry.lock().expect("registry_guard lock failure (inner - Ok_)");
-                                for other in registry_guard.iter().filter(|c| c.id != client_id) {
-                                    // NOTE: If messages are "disappearing" in the future its
-                                    // likely that we dont check the Result<> from try_send here!
-                                    let _ = other.tx.try_send(serialized.clone());
+                        if !trimmed.is_empty() {
+                            match serde_json::from_str::<ClientMessage>(trimmed) {
+                                Ok(ClientMessage::PositionUpdate {position}) => {
+                                    let msg = ServerMessage::PositionUpdate {
+                                        player_id: client_id,
+                                        position,
+                                    };
+                                    let serialized = serde_json::to_string(&msg).expect("position update message serialization failure") + "\n";
+                                    let registry_guard = registry.lock().expect("registry_guard lock failure (inner - Ok_)");
+                                    for other in registry_guard.iter().filter(|c| c.id != client_id) {
+                                        // TODO: Handle Result<> from try_send properly...
+                                        let _ = other.tx.try_send(serialized.clone());
+                                    }
+                                    // println!("PositionUpdate:\n\tClient: {client_id}\n\tSession: {session}\n\tNew Position: x:{}|y:{}|z:{}\n",
+                                    //     position.x,
+                                    //     position.y,
+                                    //     position.z
+                                    // );
+                                    // TODO: We dont actually update the player pos yet!
                                 }
-                                println!("PositionUpdate:\n\tClient: {client_id}\n\tSession: {session}\n\tNew Position: x:{}|y:{}|z:{}\n",
-                                    position.x,
-                                    position.y,
-                                    position.z
-                                );
-                                // TODO: We dont actually update the player pos yet!
-                            }
-                            Err(e) => {
-                                println!("Invalid message!\n\tClient: {client_id}\n\tSession: {session}\n\tmsg: {trimmed}\n\tError: {e}\n");
+                                Err(e) => {
+                                    println!("Invalid message!\n\tClient: {client_id}\n\tSession: {session}\n\tmsg: {trimmed}\n\tError: {e}\n");
+                                }
                             }
                         }
                     }

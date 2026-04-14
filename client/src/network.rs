@@ -29,6 +29,7 @@ pub enum NetworkEvent {
     Connected,
     Disconnected,
     PlayerPositionUpdate { player_id: Uuid, position: Vec3 },
+    PlayerDisconnected { player_id: Uuid },
 }
 
 /// Handle for sending commands to network task
@@ -127,7 +128,12 @@ async fn handle_connection(
                         let trimmed = line.trim();
                         match serde_json::from_str::<ServerMessage>(trimmed) {
                             Ok(ServerMessage::PositionUpdate {player_id, position}) => {
+                                // TODO: Handle the Result from send properly
                                 let _ = event_tx.send(NetworkEvent::PlayerPositionUpdate {player_id, position});
+                            }
+                            Ok(ServerMessage::PlayerDisconnected {player_id}) => {
+                                // TODO: Handle the Result from send properly
+                                let _ = event_tx.send(NetworkEvent::PlayerDisconnected {player_id});
                             }
                             Err(e) => {
                                 println!("Failed to parse server message: {e}");
