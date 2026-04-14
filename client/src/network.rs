@@ -8,6 +8,10 @@ use tokio::{
 };
 use uuid::Uuid;
 
+// Configs
+const POSITION_UPDATE_RATE_HZ: f32 = 20.0;
+const POSITION_COORD_ROUND_DECIMAL: i32 = 2;
+
 /// Configuration for server connection, will be user config later
 pub struct ServerConfig {
     pub address: Ipv4Addr,
@@ -155,4 +159,27 @@ async fn handle_connection(
             }
         }
     }
+}
+
+/// Check if enough time has elapsed to send next pos update message
+pub fn should_send_position_update(last_update_time: &mut f32, dt: f32) -> bool {
+    *last_update_time += dt;
+    let update_interval = 1.0 / POSITION_UPDATE_RATE_HZ;
+
+    if *last_update_time >= update_interval {
+        *last_update_time -= update_interval;
+        true
+    } else {
+        false
+    }
+}
+
+/// Round posiiton coordinates
+pub fn round_position(position: Vec3) -> Vec3 {
+    let multiplier = 10_f32.powi(POSITION_COORD_ROUND_DECIMAL);
+    Vec3::new(
+        (position.x * multiplier).round() / multiplier,
+        (position.y * multiplier).round() / multiplier,
+        (position.z * multiplier).round() / multiplier,
+    )
 }

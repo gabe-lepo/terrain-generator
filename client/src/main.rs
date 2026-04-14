@@ -9,7 +9,9 @@ mod shaders;
 mod terrain_manager;
 mod world;
 
-use network::{NetworkEvent, ServerConfig, spawn_network_task};
+use network::{
+    NetworkEvent, ServerConfig, round_position, should_send_position_update, spawn_network_task,
+};
 use player::Player;
 use raylib::prelude::*;
 use remote_player::RemotePlayer;
@@ -47,6 +49,9 @@ fn main() {
     // Shader setup
     let mut shader_manager = ShaderManager::new();
     shader_manager.load_shaders(&mut rl_handle, &rl_thread);
+
+    // timers
+    let mut last_position_update = 0.0;
 
     // Main loop
     while !rl_handle.window_should_close() {
@@ -89,9 +94,15 @@ fn main() {
             }
         }
 
-        // Send position to server every frame
-        let client_pos = shared::Vec3::new(player.position.x, player.position.y, player.position.z);
-        network_handle.send_position_update(client_pos);
+        // Send position to server at configured rate
+        if should_send_position_update(&mut last_position_update, dt) {
+            let rounded_pos = round_position(shared::Vec3::new(
+                player.position.x,
+                player.position.y,
+                player.position.z,
+            ));
+            network_handle.send_position_update(rounded_pos);
+        }
 
         // Update player
         player.update(&rl_handle, &terrain_manager, dt);

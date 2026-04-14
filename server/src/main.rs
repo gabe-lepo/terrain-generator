@@ -110,11 +110,11 @@ async fn handle_connection(
                                         // TODO: Handle Result<> from try_send properly...
                                         let _ = other.tx.try_send(serialized.clone());
                                     }
-                                    // println!("PositionUpdate:\n\tClient: {client_id}\n\tSession: {session}\n\tNew Position: x:{}|y:{}|z:{}\n",
-                                    //     position.x,
-                                    //     position.y,
-                                    //     position.z
-                                    // );
+                                    println!("PositionUpdate:\n\tClient: {client_id}\n\tSession: {session}\n\tNew Position: x:{}|y:{}|z:{}\n",
+                                        position.x,
+                                        position.y,
+                                        position.z
+                                    );
                                     // TODO: We dont actually update the player pos yet!
                                 }
                                 Err(e) => {
