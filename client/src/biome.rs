@@ -120,8 +120,8 @@ impl BiomeSystem {
     // Define biome presets as assc funcs
     fn mountains() -> BiomeParams {
         BiomeParams::new(
-            200.0,
-            40.0,
+            300.0,
+            75.0,
             6,
             0.5,
             Color::new(100, 100, 100, 255),
@@ -133,9 +133,9 @@ impl BiomeSystem {
     fn hills() -> BiomeParams {
         BiomeParams::new(
             75.0,
-            10.0,
+            5.0,
             2,
-            0.5,
+            0.1,
             Color::new(50, 150, 50, 255),
             Color::new(100, 180, 100, 255),
             1.0,
@@ -144,10 +144,10 @@ impl BiomeSystem {
 
     fn plains() -> BiomeParams {
         BiomeParams::new(
-            20.0,
+            5.0,
             0.0,
-            1,
-            0.5,
+            2,
+            0.001,
             Color::new(200, 180, 100, 255),
             Color::new(220, 200, 130, 255),
             0.3,
