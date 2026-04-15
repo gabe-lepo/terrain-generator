@@ -1,4 +1,4 @@
-use crate::config::{BIOME_FREQ, HILLS, MOUNTAINS, PLAINS, SEED};
+use crate::config::{BIOME_FREQ, DESERT, EXTREME_MOUNTAINS, HILLS, MOUNTAINS, SEED};
 
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
@@ -7,6 +7,7 @@ use raylib::prelude::*;
 /// < 1.0: favors peak color
 /// = 1.0: even linear transition
 /// > 1.0: Favors base color until high up then sharp peak
+#[derive(Clone)]
 pub struct BiomeParams {
     pub name: String,
     pub height_scale: f32,
@@ -57,33 +58,50 @@ impl BiomeSystem {
         let seed_offset = (SEED as f64 * 1_000.0) + 10_000.0;
         let biome_x = (x as f64) * BIOME_FREQ + seed_offset;
         let biome_z = (z as f64) * BIOME_FREQ + seed_offset;
-        let biome_value = self.noise.get([biome_x, biome_z]);
 
         // blend biomes based on noise val
-        Self::blend_biomes(biome_value)
+        let biome_value = self.noise.get([biome_x, biome_z]);
+        Self::blend_biomes(Self::remap_biome_noise(biome_value))
     }
 
     // Private
 
-    /// Blend between three biomes based on noise val
+    /// Blend between biomes based on noise val
     fn blend_biomes(noise_value: f64) -> BiomeParams {
-        // TODO: Add more....
-        // 3 presets for now
-        let mountains = Self::mountains();
-        let plains = Self::plains();
-        let hills = Self::hills();
+        // NOTE: Keep sorted by threshold val low -> high
+        let blend_points: &[(f64, BiomeParams)] = &[
+            (-1.0, Self::desert()),
+            (-0.67, Self::hills()),
+            (-0.33, Self::mountains()),
+            (0.0, Self::extreme_mountains()),
+            (0.33, Self::mountains()),
+            (0.67, Self::hills()),
+            (1.0, Self::desert()),
+        ];
 
-        // Map noise to blend weighting
-        if noise_value < -0.5 {
-            let t = ((noise_value + 1.0) / 0.5) as f32;
-            Self::lerp_biomes(&plains, &mountains, t)
-        } else if noise_value < 0.0 {
-            let t = ((noise_value + 0.5) / 0.5) as f32;
-            Self::lerp_biomes(&mountains, &hills, t)
-        } else {
-            let t = ((noise_value - 0.0) / 1.0) as f32;
-            Self::lerp_biomes(&hills, &plains, t)
+        // Find two waypoints that bracket noise val
+        for i in 1..blend_points.len() {
+            let (lo_thresh, ref lo_biome) = blend_points[i - 1];
+            let (hi_thresh, ref hi_biome) = blend_points[i];
+
+            if noise_value <= hi_thresh {
+                let t = ((noise_value - lo_thresh) / (hi_thresh - lo_thresh)) as f32;
+                return Self::lerp_biomes(lo_biome, hi_biome, t.clamp(0.0, 1.0));
+            }
         }
+
+        // Fallback return last biome (shouldnt be reached if waypoint range covers -1,1)
+        panic!("ERROR: blend points likely not covering [-1,1] range!");
+        blend_points
+            .last()
+            .expect("Failed last waypoint check")
+            .1
+            .clone()
+    }
+
+    fn remap_biome_noise(v: f64) -> f64 {
+        let sign = v.signum();
+        sign * v.abs().powf(0.9)
     }
 
     /// Lerp between 2 biome param sets
@@ -125,6 +143,19 @@ impl BiomeSystem {
     }
 
     // Define biome presets from config
+    fn extreme_mountains() -> BiomeParams {
+        BiomeParams::new(
+            EXTREME_MOUNTAINS.name.to_string(),
+            EXTREME_MOUNTAINS.height_scale,
+            EXTREME_MOUNTAINS.base_height,
+            EXTREME_MOUNTAINS.octaves,
+            EXTREME_MOUNTAINS.persistence,
+            EXTREME_MOUNTAINS.base_color,
+            EXTREME_MOUNTAINS.peak_color,
+            EXTREME_MOUNTAINS.color_power,
+        )
+    }
+
     fn mountains() -> BiomeParams {
         BiomeParams::new(
             MOUNTAINS.name.to_string(),
@@ -151,16 +182,16 @@ impl BiomeSystem {
         )
     }
 
-    fn plains() -> BiomeParams {
+    fn desert() -> BiomeParams {
         BiomeParams::new(
-            PLAINS.name.to_string(),
-            PLAINS.height_scale,
-            PLAINS.base_height,
-            PLAINS.octaves,
-            PLAINS.persistence,
-            PLAINS.base_color,
-            PLAINS.peak_color,
-            PLAINS.color_power,
+            DESERT.name.to_string(),
+            DESERT.height_scale,
+            DESERT.base_height,
+            DESERT.octaves,
+            DESERT.persistence,
+            DESERT.base_color,
+            DESERT.peak_color,
+            DESERT.color_power,
         )
     }
 }

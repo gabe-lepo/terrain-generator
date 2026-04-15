@@ -20,7 +20,7 @@ pub const WINDOW_HEIGHT: i32 = 1440;
 // ============================================================================
 
 /// God mode or not (flying, higher speed, no collision)
-pub const GOD_MODE: bool = false;
+pub const GOD_MODE: bool = true;
 
 /// Player move speed
 pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 15.0 };
@@ -97,7 +97,7 @@ pub const BIOME_FREQ: f64 = 0.0005;
 
 /// If true, render wireframe only (no fog)
 /// If false, render solid with fog shader
-pub const RENDER_WIREFRAME: bool = false;
+pub const RENDER_WIREFRAME: bool = true;
 
 /// Multiplier for frustum culling distance beyond view distance
 /// Higher = render farther (lower FPS), Lower = cull more (higher FPS)
@@ -167,6 +167,19 @@ impl BiomeConfig {
     }
 }
 
+/// Extreme mountains, like mountains but more mountain
+pub const EXTREME_MOUNTAINS: BiomeConfig = BiomeConfig::new(
+    "Extreme Mountains",
+    500.0,
+    200.0,
+    12,
+    0.5,
+    Color::new(255, 255, 255, 255),
+    Color::new(0, 0, 0, 255),
+    3.5,
+    0.1,
+);
+
 /// Mountains biome: tall peaks with gray-to-white gradient
 pub const MOUNTAINS: BiomeConfig = BiomeConfig::new(
     "Mountains",
@@ -180,19 +193,6 @@ pub const MOUNTAINS: BiomeConfig = BiomeConfig::new(
     0.5,
 );
 
-/// Plains biome: flat terrain with tan/wheat colors
-pub const PLAINS: BiomeConfig = BiomeConfig::new(
-    "Plains",
-    20.0,
-    0.0,
-    1,
-    0.5,
-    Color::new(200, 180, 100, 255),
-    Color::new(220, 200, 130, 255),
-    0.3,
-    1.0,
-);
-
 /// Hills biome: rolling terrain with green gradient
 pub const HILLS: BiomeConfig = BiomeConfig::new(
     "Hills",
@@ -203,5 +203,18 @@ pub const HILLS: BiomeConfig = BiomeConfig::new(
     Color::new(0, 150, 0, 255),
     Color::new(100, 255, 100, 255),
     1.0,
+    1.0,
+);
+
+/// Desert biome: flat terrain with... sand colors
+pub const DESERT: BiomeConfig = BiomeConfig::new(
+    "Desert",
+    20.0,
+    0.0,
+    1,
+    0.5,
+    Color::new(200, 180, 100, 255),
+    Color::new(220, 200, 130, 255),
+    0.3,
     1.0,
 );
