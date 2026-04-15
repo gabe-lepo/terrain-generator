@@ -94,10 +94,6 @@ impl ShaderManager {
         self.fog_shader.as_ref()
     }
 
-    pub fn get_fog_shader_mut(&mut self) -> Option<&mut Shader> {
-        self.fog_shader.as_mut()
-    }
-
     // Private
     fn load_fog_shader(rl: &mut RaylibHandle, thread: &RaylibThread) -> Option<Shader> {
         // Use absolute path from manifest directory so it works regardless of CWD

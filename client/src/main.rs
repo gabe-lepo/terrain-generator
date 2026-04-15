@@ -1,5 +1,5 @@
 // WARN: Comment this after building out everything
-#![allow(dead_code, unused)]
+// #![allow(dead_code, unused)]
 mod biome;
 mod chunk;
 mod chunk_loader;
@@ -11,8 +11,7 @@ mod shaders;
 mod terrain_manager;
 mod world;
 
-use chunk_loader::*;
-use config::SEED;
+use config::{WINDOW_HEIGHT, WINDOW_WIDTH};
 use network::{
     NetworkEvent, ServerConfig, round_position, should_send_position_update, spawn_network_task,
 };
@@ -39,13 +38,13 @@ fn main() {
 
     // Raylib setup
     let (mut rl_handle, rl_thread) = raylib::init()
-        .size(1280, 720)
+        .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title("Terrain Explorer")
         .build();
 
     rl_handle.set_target_fps(60);
     rl_handle.set_trace_log(TraceLogLevel::LOG_WARNING); // Suppress raylib INFO logs
-    rl_handle.disable_cursor();
+    rl_handle.disable_cursor(); // BUG: Breaks fog???
 
     // Player and terrain setup
     let mut player = Player::new(Vector3::new(0.0, 100.0, 0.0));
@@ -166,20 +165,11 @@ fn draw_stats(
         Color::BLACK,
     );
 
-    // Grounded stae
-    d.draw_text(
-        &format!("Grounded: {}", player.is_grounded),
-        10,
-        50,
-        20,
-        Color::BLACK,
-    );
-
     // Memory usage
     d.draw_text(
         &format!("Memory: {:.1} MB", used_mb),
         10,
-        70,
+        50,
         20,
         Color::BLACK,
     );
@@ -191,6 +181,15 @@ fn draw_stats(
             terrain_manager.rendered_chunk_count(),
             terrain_manager.chunk_count()
         ),
+        10,
+        70,
+        20,
+        Color::BLACK,
+    );
+
+    // Biome names
+    d.draw_text(
+        &terrain_manager.get_biome_name_at(player.position.x, player.position.z),
         10,
         90,
         20,

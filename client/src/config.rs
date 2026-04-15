@@ -6,6 +6,56 @@
 use raylib::prelude::Color;
 
 // ============================================================================
+// GENERAL GAME CLIENT OPTIONS
+// ============================================================================
+
+/// Set window width
+pub const WINDOW_WIDTH: i32 = 2560;
+
+/// Set window height
+pub const WINDOW_HEIGHT: i32 = 1440;
+
+// ============================================================================
+// PLAYER OPTIONS
+// ============================================================================
+
+/// God mode or not (flying, higher speed, no collision)
+pub const GOD_MODE: bool = true;
+
+/// Player move speed
+pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 15.0 };
+
+/// Gravity force applied after jumping
+pub const GRAVITY_FORCE: f32 = 30.0;
+
+/// Jump force applied when jumping
+pub const JUMP_FORCE: f32 = 15.0;
+
+/// Sensitivity of mouse movements
+pub const MOUSE_SENSITIVITY: f32 = 0.003;
+
+/// Modifier applied when sprint button held down
+pub const SPRINT_MULTIPLIER: f32 = 2.0;
+
+/// Modifier applied when crouch button held down
+pub const CROUCH_MULTIPLIER: f32 = 0.5;
+
+// ============================================================================
+// NETWORK / MULTIPLAYER
+// ============================================================================
+
+/// Enable/disable network connection attempts
+pub const CONNECT: bool = false;
+
+/// Position updates sent per second
+/// Higher = smoother movement, more bandwidth
+pub const POSITION_UPDATE_RATE_HZ: f32 = 20.0;
+
+/// Decimal places to round position coordinates
+/// Lower = less precision, smaller packets
+pub const POSITION_ROUND_DECIMALS: u32 = 1;
+
+// ============================================================================
 // TERRAIN GENERATION
 // ============================================================================
 
@@ -59,12 +109,20 @@ pub const FOG_NEAR_PERCENT: f32 = 0.6;
 /// Fog full opacity distance as percentage of max render distance (0.0 - 1.0)
 pub const FOG_FAR_PERCENT: f32 = 0.8;
 
+/// Minimum world height
+pub const WORLD_MIN_Y: f32 = -100.0;
+
+/// Maximum world height
+pub const WORLD_MAX_Y: f32 = 1_000.0;
+
 // ============================================================================
 // BIOME DEFINITIONS
 // ============================================================================
 
 /// Biome configuration parameters
 pub struct BiomeConfig {
+    /// Biome name string
+    pub name: &'static str,
     /// Maximum height variation (world units)
     pub height_scale: f32,
     /// Base/floor height (world units)
@@ -85,6 +143,7 @@ pub struct BiomeConfig {
 
 impl BiomeConfig {
     pub const fn new(
+        name: &'static str,
         height_scale: f32,
         base_height: f32,
         octaves: u32,
@@ -95,6 +154,7 @@ impl BiomeConfig {
         freq_scale: f32,
     ) -> Self {
         Self {
+            name,
             height_scale,
             base_height,
             octaves,
@@ -109,6 +169,7 @@ impl BiomeConfig {
 
 /// Mountains biome: tall peaks with gray-to-white gradient
 pub const MOUNTAINS: BiomeConfig = BiomeConfig::new(
+    "Mountains",
     200.0,
     40.0,
     6,
@@ -121,6 +182,7 @@ pub const MOUNTAINS: BiomeConfig = BiomeConfig::new(
 
 /// Plains biome: flat terrain with tan/wheat colors
 pub const PLAINS: BiomeConfig = BiomeConfig::new(
+    "Plains",
     20.0,
     0.0,
     1,
@@ -133,6 +195,7 @@ pub const PLAINS: BiomeConfig = BiomeConfig::new(
 
 /// Hills biome: rolling terrain with green gradient
 pub const HILLS: BiomeConfig = BiomeConfig::new(
+    "Hills",
     75.0,
     10.0,
     2,
@@ -142,19 +205,3 @@ pub const HILLS: BiomeConfig = BiomeConfig::new(
     1.0,
     1.0,
 );
-
-// ============================================================================
-// NETWORK / MULTIPLAYER
-// ============================================================================
-
-/// Enable/disable network connection
-/// Set to false for offline rendering debug
-pub const CONNECT: bool = false;
-
-/// Position updates sent per second
-/// Higher = smoother movement, more bandwidth
-pub const POSITION_UPDATE_RATE_HZ: f32 = 20.0;
-
-/// Decimal places to round position coordinates
-/// Lower = less precision, smaller packets
-pub const POSITION_ROUND_DECIMALS: u32 = 1;

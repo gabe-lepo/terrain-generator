@@ -1,8 +1,7 @@
-use crate::config::{CONNECT, POSITION_UPDATE_RATE_HZ, POSITION_ROUND_DECIMALS};
+use crate::config::{CONNECT, POSITION_ROUND_DECIMALS, POSITION_UPDATE_RATE_HZ};
 
 use shared::{ClientMessage, ServerMessage, Vec3};
 use std::net::Ipv4Addr;
-use std::sync::Arc;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,

@@ -1,10 +1,8 @@
-use crate::biome::{self, BiomeSystem};
-use crate::config::{CHUNK_SIZE, TERRAIN_RESOLUTION, NOISE_FREQ, LACUNARITY, SEED};
-use crate::world;
-use libc::chflags;
+use crate::biome::BiomeSystem;
+use crate::config::{CHUNK_SIZE, LACUNARITY, NOISE_FREQ, SEED, TERRAIN_RESOLUTION};
 use noise::{NoiseFn, Perlin};
-use raylib::{error::Error, prelude::*};
-use std::{ops::Bound, sync::Arc};
+use raylib::prelude::*;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 // Config
@@ -32,13 +30,12 @@ pub struct ChunkLoader {
 
 impl ChunkLoader {
     /// Create new chunk loader with dedicated runtime
-    pub fn new(noise: Perlin, biome_system: BiomeSystem) -> Self {
-        let (request_tx, mut request_rx) = mpsc::unbounded_channel::<ChunkRequest>();
+    pub fn new(noise: Perlin, biome_system: Arc<BiomeSystem>) -> Self {
+        let (request_tx, request_rx) = mpsc::unbounded_channel::<ChunkRequest>();
         let (completed_tx, completed_rx) = mpsc::unbounded_channel::<ChunkData>();
 
         // Shared ref counters
         let noise = Arc::new(noise);
-        let biome_system = Arc::new(biome_system);
 
         // Dedicated tokio runtime in separated thread
         std::thread::spawn(move || {
@@ -98,11 +95,7 @@ async fn chunk_loader_task(
 }
 
 /// Generate all chunk data, cpu only work here
-fn generate_chunk_data(
-    coord: (i32, i32),
-    noise: &Perlin,
-    biome_system: &BiomeSystem,
-) -> ChunkData {
+fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, biome_system: &BiomeSystem) -> ChunkData {
     // Generate heightmap
     let heightmap = generate_heightmap(coord, noise, biome_system);
 

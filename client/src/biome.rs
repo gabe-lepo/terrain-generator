@@ -1,4 +1,4 @@
-use crate::config::{BIOME_FREQ, MOUNTAINS, PLAINS, HILLS, SEED};
+use crate::config::{BIOME_FREQ, HILLS, MOUNTAINS, PLAINS, SEED};
 
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
@@ -8,6 +8,7 @@ use raylib::prelude::*;
 /// = 1.0: even linear transition
 /// > 1.0: Favors base color until high up then sharp peak
 pub struct BiomeParams {
+    pub name: String,
     pub height_scale: f32,
     pub base_height: f32,
     pub octaves: u32,
@@ -19,6 +20,7 @@ pub struct BiomeParams {
 
 impl BiomeParams {
     pub fn new(
+        name: String,
         height_scale: f32,
         base_height: f32,
         octaves: u32,
@@ -28,6 +30,7 @@ impl BiomeParams {
         color_transition_power: f32,
     ) -> Self {
         Self {
+            name,
             height_scale,
             base_height,
             octaves,
@@ -46,14 +49,12 @@ pub struct BiomeSystem {
 
 impl BiomeSystem {
     pub fn new(noise: Perlin) -> Self {
-        Self {
-            noise,
-        }
+        Self { noise }
     }
 
     /// Sample biome at given world pos
     pub fn get_biome_at(&self, x: f32, z: f32) -> BiomeParams {
-        let seed_offset = (SEED as f64 * 1000.0) + 10000.0;
+        let seed_offset = (SEED as f64 * 1_000.0) + 10_000.0;
         let biome_x = (x as f64) * BIOME_FREQ + seed_offset;
         let biome_z = (z as f64) * BIOME_FREQ + seed_offset;
         let biome_value = self.noise.get([biome_x, biome_z]);
@@ -88,6 +89,13 @@ impl BiomeSystem {
     /// Lerp between 2 biome param sets
     fn lerp_biomes(a: &BiomeParams, b: &BiomeParams, t: f32) -> BiomeParams {
         BiomeParams {
+            name: if a.name == b.name {
+                a.name.clone()
+            } else if t < 0.5 {
+                format!("{} -> {}", a.name, b.name)
+            } else {
+                format!("{} -> {}", b.name, a.name)
+            },
             height_scale: Self::lerp_f32(a.height_scale, b.height_scale, t),
             base_height: Self::lerp_f32(a.base_height, b.base_height, t),
             octaves: Self::lerp_f32(a.octaves as f32, b.octaves as f32, t).round() as u32,
@@ -119,6 +127,7 @@ impl BiomeSystem {
     // Define biome presets from config
     fn mountains() -> BiomeParams {
         BiomeParams::new(
+            MOUNTAINS.name.to_string(),
             MOUNTAINS.height_scale,
             MOUNTAINS.base_height,
             MOUNTAINS.octaves,
@@ -131,6 +140,7 @@ impl BiomeSystem {
 
     fn hills() -> BiomeParams {
         BiomeParams::new(
+            HILLS.name.to_string(),
             HILLS.height_scale,
             HILLS.base_height,
             HILLS.octaves,
@@ -143,6 +153,7 @@ impl BiomeSystem {
 
     fn plains() -> BiomeParams {
         BiomeParams::new(
+            PLAINS.name.to_string(),
             PLAINS.height_scale,
             PLAINS.base_height,
             PLAINS.octaves,

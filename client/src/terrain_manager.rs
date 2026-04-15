@@ -1,9 +1,9 @@
 use crate::biome::BiomeSystem;
 use crate::chunk::{Chunk, ChunkCoord};
-use crate::chunk_loader::{ChunkData, ChunkLoader};
+use crate::chunk_loader::ChunkLoader;
 use crate::config::{
-    CHUNK_SIZE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT, MAX_DISTANCE_BUFFER, RENDER_WIREFRAME,
-    TERRAIN_RESOLUTION, VIEW_DISTANCE, SEED,
+    CHUNK_SIZE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT, MAX_DISTANCE_BUFFER, RENDER_WIREFRAME, SEED,
+    TERRAIN_RESOLUTION, VIEW_DISTANCE,
 };
 use crate::shaders::ShaderManager;
 use crate::world::WorldQuery;
@@ -11,13 +11,14 @@ use crate::world::WorldQuery;
 use noise::Perlin;
 use raylib::prelude::*;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 pub struct TerrainManager {
     chunks: HashMap<ChunkCoord, Chunk>,
     noise: Perlin,
     last_player_chunk: Option<ChunkCoord>,
     last_rendered_count: usize,
-    biome_system: BiomeSystem,
+    biome_system: Arc<BiomeSystem>,
     chunk_loader: ChunkLoader,
     pending_chunks: HashSet<ChunkCoord>,
 }
@@ -25,11 +26,10 @@ pub struct TerrainManager {
 impl TerrainManager {
     pub fn new() -> Self {
         let noise = Perlin::new(SEED);
-        let seed_offset = SEED as f64 * 1000.0;
-        let biome_system = BiomeSystem::new(noise);
 
         // Create chunk loaded with shared noise and biome sys
-        let chunk_loader = ChunkLoader::new(noise, biome_system.clone());
+        let biome_system = Arc::new(BiomeSystem::new(noise));
+        let chunk_loader = ChunkLoader::new(noise, Arc::clone(&biome_system));
 
         Self {
             chunks: HashMap::new(),
@@ -142,6 +142,11 @@ impl TerrainManager {
         (fog_near, fog_far)
     }
 
+    /// Get biome system biome name
+    pub fn get_biome_name_at(&self, x: f32, z: f32) -> String {
+        self.biome_system.get_biome_at(x, z).name
+    }
+
     // Private
     fn calculate_height_from_noise(&self, x: f32, z: f32) -> f32 {
         use crate::chunk::get_height;
@@ -204,7 +209,7 @@ impl WorldQuery for TerrainManager {
             let local_x = x - chunk_world_x;
             let local_z = z - chunk_world_z;
 
-            chunk.get_height_at_local(local_x, local_z)
+            chunk.get_height_at(local_x, local_z)
         } else {
             // Chunk not loaded, calc from noise
             self.calculate_height_from_noise(x, z)

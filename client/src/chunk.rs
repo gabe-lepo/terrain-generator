@@ -1,6 +1,6 @@
 use crate::biome::BiomeSystem;
 use crate::chunk_loader::ChunkData;
-use crate::config::{CHUNK_SIZE, TERRAIN_RESOLUTION, NOISE_FREQ, LACUNARITY, SEED};
+use crate::config::{CHUNK_SIZE, LACUNARITY, NOISE_FREQ, SEED, TERRAIN_RESOLUTION};
 
 use std::f32;
 
@@ -45,29 +45,6 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    /// Generate chunk at given chunk coord
-    pub fn generate(
-        coord: ChunkCoord,
-        noise: &Perlin,
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-        biome_system: &BiomeSystem,
-    ) -> Self {
-        let heightmap = Self::generate_heightmap(coord, noise, biome_system);
-        let mesh = Self::build_mesh(coord, &heightmap, biome_system);
-        let model = rl
-            .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
-            .expect("Failed to create model from mesh");
-        let bounding_box = Self::calculate_bounding_box(&heightmap, coord);
-
-        Self {
-            coord,
-            model,
-            heightmap,
-            bounding_box,
-        }
-    }
-
     pub fn from_data(
         data: ChunkData,
         rl: &mut RaylibHandle,
@@ -182,32 +159,7 @@ impl Chunk {
         }
     }
 
-    /// Generate heightmap for the chunk
-    fn generate_heightmap(
-        coord: ChunkCoord,
-        noise: &Perlin,
-        biome_system: &BiomeSystem,
-    ) -> Vec<Vec<f32>> {
-        let grid_size = CHUNK_SIZE as usize + 1;
-        let mut heightmap = Vec::with_capacity(grid_size);
-
-        let (chunk_world_x, chunk_world_z) = coord.to_world_pos();
-
-        for z in 0..grid_size {
-            let mut row = Vec::with_capacity(grid_size);
-            for x in 0..grid_size {
-                let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
-                let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
-                let height = get_height(world_x, world_z, noise, biome_system);
-                row.push(height);
-            }
-            heightmap.push(row);
-        }
-
-        heightmap
-    }
-
-    pub fn get_height_at_local(&self, local_x: f32, local_z: f32) -> f32 {
+    pub fn get_height_at(&self, local_x: f32, local_z: f32) -> f32 {
         // Convert local coords to grid coords
         let grid_x = local_x / TERRAIN_RESOLUTION;
         let grid_z = local_z / TERRAIN_RESOLUTION;
@@ -244,176 +196,10 @@ impl Chunk {
     }
 
     // Private
-    fn build_mesh(
-        coord: ChunkCoord,
-        heightmap: &Vec<Vec<f32>>,
-        biome_system: &BiomeSystem,
-    ) -> Mesh {
-        let grid_size = heightmap.len();
-        let vertex_count = grid_size * grid_size;
-        let triangle_count = (grid_size - 1) * (grid_size - 1) * 2;
-
-        let mut vertices = Vec::with_capacity(vertex_count * 3);
-        let mut indices = Vec::with_capacity(triangle_count * 3);
-        let mut normals = Vec::with_capacity(vertex_count * 3);
-        let mut colors = Vec::with_capacity(vertex_count * 4);
-
-        // Generate vertices (relative to chunk origin at 0,0,0)
-        for z in 0..grid_size {
-            for x in 0..grid_size {
-                let local_x = x as f32 * TERRAIN_RESOLUTION;
-                let local_z = z as f32 * TERRAIN_RESOLUTION;
-                let height = heightmap[z][x];
-
-                vertices.push(local_x);
-                vertices.push(height);
-                vertices.push(local_z);
-            }
-        }
-
-        // Generate triangle indices
-        for z in 0..(grid_size - 1) {
-            for x in 0..(grid_size - 1) {
-                let top_left = (z * grid_size + x) as u16;
-                let top_right = top_left + 1;
-                let bottom_left = ((z + 1) * grid_size + x) as u16;
-                let bottom_right = bottom_left + 1;
-
-                // First triangle (topleft, bottom left, topright)
-                indices.push(top_left);
-                indices.push(bottom_left);
-                indices.push(top_right);
-
-                // Second triangle (topright, bottom left, bottom right)
-                indices.push(top_right);
-                indices.push(bottom_left);
-                indices.push(bottom_right);
-            }
-        }
-
-        // Calc normals (simple up pointing for now)
-        for _ in 0..vertex_count {
-            normals.push(0.0);
-            normals.push(1.0);
-            normals.push(0.0);
-        }
-
-        // Gen vertex colors based on height and biome
-        // TODO: This is getting complex, offload to another builder func
-        for z in 0..grid_size {
-            for x in 0..grid_size {
-                let height = heightmap[z][x];
-
-                // Get world position for the vertex
-                let (chunk_world_x, chunk_world_z) = coord.to_world_pos();
-                let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
-                let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
-
-                // Sample biome at this pos
-                let biome = biome_system.get_biome_at(world_x, world_z);
-
-                // Height-based blend (0-1 normalized)
-                let height_range = biome.height_scale;
-                let height_normalized =
-                    ((height - biome.base_height) / height_range).clamp(0.0, 1.0);
-
-                // Apply power curve to transition
-                let height_curved = height_normalized.powf(biome.color_transition_power);
-
-                // Blend between base and peak color based on height
-                let r = (biome.base_color.r as f32
-                    + (biome.peak_color.r as f32 - biome.base_color.r as f32) * height_curved)
-                    as u8;
-                let g = (biome.base_color.g as f32
-                    + (biome.peak_color.g as f32 - biome.base_color.g as f32) * height_curved)
-                    as u8;
-                let b = (biome.base_color.b as f32
-                    + (biome.peak_color.b as f32 - biome.base_color.b as f32) * height_curved)
-                    as u8;
-
-                colors.push(r);
-                colors.push(g);
-                colors.push(b);
-                colors.push(255);
-            }
-        }
-
-        // Now build raylib mesh
-        // WARN: Unsafe block (unsafe FFI)
-        unsafe {
-            // Alloc mem using libc malloc
-            let vertices_ptr =
-                libc::malloc(vertices.len() * std::mem::size_of::<f32>()) as *mut f32;
-            let indices_ptr = libc::malloc(indices.len() * std::mem::size_of::<u16>()) as *mut u16;
-            let normals_ptr = libc::malloc(normals.len() * std::mem::size_of::<f32>()) as *mut f32;
-            let colors_ptr = libc::malloc(colors.len() * std::mem::size_of::<u8>()) as *mut u8;
-
-            // Copy
-            std::ptr::copy_nonoverlapping(vertices.as_ptr(), vertices_ptr, vertices.len());
-            std::ptr::copy_nonoverlapping(indices.as_ptr(), indices_ptr, indices.len());
-            std::ptr::copy_nonoverlapping(normals.as_ptr(), normals_ptr, normals.len());
-            std::ptr::copy_nonoverlapping(colors.as_ptr(), colors_ptr, colors.len());
-
-            // Construct the mesh
-            let mut mesh = ffi::Mesh {
-                vertexCount: vertex_count as i32,
-                triangleCount: triangle_count as i32,
-                vertices: vertices_ptr,
-                indices: indices_ptr,
-                normals: normals_ptr,
-                // All others are null or 0
-                texcoords: std::ptr::null_mut(),
-                texcoords2: std::ptr::null_mut(),
-                colors: colors_ptr,
-                tangents: std::ptr::null_mut(),
-                animVertices: std::ptr::null_mut(),
-                animNormals: std::ptr::null_mut(),
-                boneIds: std::ptr::null_mut(),
-                boneWeights: std::ptr::null_mut(),
-                boneMatrices: std::ptr::null_mut(),
-                boneCount: 0,
-                vaoId: 0,
-                vboId: std::ptr::null_mut(),
-            };
-
-            // Fire off to GPU
-            ffi::UploadMesh(&mut mesh, false);
-
-            // Wrap in Mesh
-            Mesh::from_raw(mesh)
-        } // WARN: Unsafe end
-    }
-
-    fn calculate_bounding_box(heightmap: &Vec<Vec<f32>>, coord: ChunkCoord) -> BoundingBox {
-        let (world_x, world_z) = coord.to_world_pos();
-
-        // Find min/max heights in heightmap
-        let mut min_height = f32::MAX;
-        let mut max_height = f32::MIN;
-
-        for row in heightmap {
-            for &height in row {
-                min_height = min_height.min(height);
-                max_height = max_height.max(height);
-            }
-        }
-
-        let chunk_size = CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
-
-        BoundingBox::new(
-            Vector3::new(world_x, min_height, world_z),
-            Vector3::new(world_x + chunk_size, max_height, world_z + chunk_size),
-        )
-    }
 }
 
 /// Fancy terrain gen
-pub fn get_height(
-    x: f32,
-    z: f32,
-    noise: &Perlin,
-    biome_system: &BiomeSystem,
-) -> f32 {
+pub fn get_height(x: f32, z: f32, noise: &Perlin, biome_system: &BiomeSystem) -> f32 {
     let seed_offset = SEED as f64 * 1000.0;
 
     // Sample biome as this position

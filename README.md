@@ -16,6 +16,7 @@ in Rust.
 ### Client
 
 - <b>_Figure out the screwy render distance + fog (shaders in general) issues_</b>
+- Fix non-god mode terrain model collision failure
 - Menu system
 - Menu-based configs
   - Allow user to enter server IP and port before connecting
@@ -27,6 +28,7 @@ in Rust.
 - Better biome definition system
 - Shader-based lighting
 - Objects! I.e. something to do in the game...
+- Fix obvious visual lines between biomes (color and height)
 - Move configs to shared, in case we need more complex server configs
 
 ## Running

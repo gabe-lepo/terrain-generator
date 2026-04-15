@@ -1,15 +1,11 @@
+use crate::config;
 use crate::world::WorldQuery;
 
+use config::{
+    CROUCH_MULTIPLIER, GOD_MODE, GRAVITY_FORCE, JUMP_FORCE, MOUSE_SENSITIVITY, MOVE_SPEED,
+    SPRINT_MULTIPLIER, WORLD_MAX_Y, WORLD_MIN_Y,
+};
 use raylib::prelude::*;
-
-// Consts
-const MOVE_SPEED: f32 = 200.0;
-const GRAVITY_FORCE: f32 = 30.0;
-const JUMP_FORCE: f32 = 15.0;
-const MOUSE_SENSITIVITY: f32 = 0.003;
-const SPRINT_MULTIPLIER: f32 = 2.0;
-const CROUCH_MULTIPLIER: f32 = 0.5;
-const GOD_MODE: bool = true;
 
 pub struct Player {
     pub position: Vector3,
@@ -115,6 +111,9 @@ impl Player {
                 self.velocity.y = JUMP_FORCE;
             }
         }
+
+        // Clamp to world height min and max
+        self.position.y = self.position.y.clamp(WORLD_MIN_Y, WORLD_MAX_Y);
     }
 
     fn get_forward_vec(&self) -> Vector3 {
@@ -176,5 +175,8 @@ impl Player {
         } else {
             self.is_grounded = false;
         }
+
+        // Clamp player y to world min and max heights
+        self.position.y = self.position.y.clamp(WORLD_MIN_Y, WORLD_MAX_Y);
     }
 }
