@@ -24,6 +24,8 @@ use sysinfo::System;
 use terrain_manager::TerrainManager;
 use uuid::Uuid;
 
+use crate::config::FOG_COLOR;
+
 const BACKGROUND_COLOR: Color = Color::DEEPSKYBLUE;
 
 fn main() {
@@ -46,8 +48,13 @@ fn main() {
     rl_handle.set_trace_log(TraceLogLevel::LOG_WARNING); // Suppress raylib INFO logs
     rl_handle.disable_cursor();
 
+    // WARN: Experimental camera far plane clip modification
+    unsafe {
+        raylib::ffi::rlSetClipPlanes(0.01, 5000.0);
+    }
+
     // Player and terrain setup
-    let mut player = Player::new(Vector3::new(0.0, 100.0, 0.0));
+    let mut player = Player::new(Vector3::new(-228.0, 308.0, 62.0));
     let mut terrain_manager = TerrainManager::new();
 
     // Shader setup
@@ -129,7 +136,7 @@ fn main() {
                 &shader_manager,
                 fog_near,
                 fog_far,
-                BACKGROUND_COLOR,
+                FOG_COLOR,
             );
 
             // Render remote players

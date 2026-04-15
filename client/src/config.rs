@@ -60,7 +60,7 @@ pub const POSITION_ROUND_DECIMALS: u32 = 1;
 // ============================================================================
 
 /// Seed used for Perlin noise and other variation offsets
-pub const SEED: u32 = 111111;
+pub const SEED: u32 = 12345;
 
 /// Size of each chunk in vertices per side (e.g., 16 = 16x16 grid)
 /// Smaller = more chunks but less memory per chunk
@@ -70,12 +70,12 @@ pub const CHUNK_SIZE: i32 = 16;
 /// World units per vertex in the heightmap
 /// Larger = more spread out terrain, fewer vertices
 /// Smaller = more detailed terrain, more vertices
-pub const TERRAIN_RESOLUTION: f32 = 2.5;
+pub const TERRAIN_RESOLUTION: f32 = 10.0;
 
 /// How many chunks to load in each direction from player
 /// Total chunks = (VIEW_DISTANCE * 2 + 1)^2
 /// 25 = 51x51 grid = 2,601 chunks
-pub const VIEW_DISTANCE: i32 = 25;
+pub const VIEW_DISTANCE: i32 = 100;
 
 /// Base frequency for Perlin noise sampling
 /// Lower = larger, smoother terrain features
@@ -97,23 +97,29 @@ pub const BIOME_FREQ: f64 = 0.0005;
 
 /// If true, render wireframe only (no fog)
 /// If false, render solid with fog shader
-pub const RENDER_WIREFRAME: bool = true;
+pub const RENDER_WIREFRAME: bool = false;
 
 /// Multiplier for frustum culling distance beyond view distance
 /// Higher = render farther (lower FPS), Lower = cull more (higher FPS)
 pub const MAX_DISTANCE_BUFFER: f32 = 2.0;
 
 /// Fog start distance as percentage of max render distance (0.0 - 1.0)
-pub const FOG_NEAR_PERCENT: f32 = 0.6;
+pub const FOG_NEAR_PERCENT: f32 = 0.5;
 
 /// Fog full opacity distance as percentage of max render distance (0.0 - 1.0)
-pub const FOG_FAR_PERCENT: f32 = 0.8;
+pub const FOG_FAR_PERCENT: f32 = 0.7;
+
+/// Fog color
+pub const FOG_COLOR: Color = Color::RED;
 
 /// Minimum world height
 pub const WORLD_MIN_Y: f32 = -100.0;
 
 /// Maximum world height
-pub const WORLD_MAX_Y: f32 = 1_000.0;
+pub const WORLD_MAX_Y: f32 = 2_000.0;
+
+// Config
+pub const CHUNK_LOADER_THREAD_POOLS: usize = 4;
 
 // ============================================================================
 // BIOME DEFINITIONS

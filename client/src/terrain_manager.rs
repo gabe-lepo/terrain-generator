@@ -154,6 +154,9 @@ impl TerrainManager {
     }
 
     fn is_chunk_potentially_visible(camera: &Camera3D, chunk: &Chunk) -> bool {
+        // Debugging - kill frustum culling
+        // return true;
+
         let bbox = &chunk.bounding_box;
         // Camera forward direction
         let forward = Vector3::new(

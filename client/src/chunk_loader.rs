@@ -1,12 +1,12 @@
 use crate::biome::BiomeSystem;
-use crate::config::{CHUNK_SIZE, GOD_MODE, LACUNARITY, NOISE_FREQ, SEED, TERRAIN_RESOLUTION};
+use crate::config::{
+    CHUNK_LOADER_THREAD_POOLS, CHUNK_SIZE, GOD_MODE, LACUNARITY, NOISE_FREQ, SEED,
+    TERRAIN_RESOLUTION,
+};
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-
-// Config
-const LOADER_THREAD_POOL_SIZE: usize = 4; // TODO: Mutable based on user hardware??
 
 /// Request to generate a chunk
 pub struct ChunkRequest {
@@ -41,7 +41,7 @@ impl ChunkLoader {
         // Dedicated tokio runtime in separated thread
         std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(LOADER_THREAD_POOL_SIZE)
+                .worker_threads(CHUNK_LOADER_THREAD_POOLS)
                 .thread_name("chunk-loader")
                 .build()
                 .expect("Failed to create chunk loader runtime");

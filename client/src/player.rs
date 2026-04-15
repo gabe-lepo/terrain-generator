@@ -45,7 +45,7 @@ impl Player {
             eye_position,
             eye_position + self.get_forward_vec(),
             Vector3::up(),
-            70.0,
+            90.0,
         )
     }
 
