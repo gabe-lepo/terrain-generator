@@ -57,11 +57,16 @@ impl TerrainManager {
         // - Cap chunk uploads per frame
         // - Unless loading initial chunks, then no effective cap with max usize
 
-        // let expected_chunks = ((VIEW_DISTANCE * 2 + 1) * (VIEW_DISTANCE * 2 + 1)) as usize;
-        // let initial_load_complete = self.chunks.len() >= expected_chunks;
-        // let upload_cap = if initial_load_complete { 8 } else { usize::MAX };
+        let expected_chunks = ((VIEW_DISTANCE * 2 + 1) * (VIEW_DISTANCE * 2 + 1)) as f32;
+        let initial_load_complete = self.chunks.len() >= (expected_chunks * 0.9).round() as usize;
+        let upload_cap = if initial_load_complete {
+            16
+        } else {
+            usize::MAX
+        };
         let mut uploaded_this_frame = 0;
-        while uploaded_this_frame < 8 {
+
+        while uploaded_this_frame < upload_cap {
             if let Some(chunk_data) = self.chunk_loader.poll_completed() {
                 let coord = ChunkCoord::new(chunk_data.coord.0, chunk_data.coord.1);
                 let shader = if RENDER_WIREFRAME { None } else { fog_shader };

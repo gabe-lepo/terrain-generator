@@ -26,6 +26,7 @@ in Rust.
 - Objects! I.e. something to do in the game...
 - Fix obvious visual lines between biomes (color and height)
 - Move configs to shared, in case we need more complex server configs
+- Reduce RAM usage with higher view distances
 
 ## Running
 

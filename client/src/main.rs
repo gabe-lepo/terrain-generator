@@ -44,9 +44,10 @@ fn main() {
         .title("Terrain Explorer")
         .build();
 
-    rl_handle.set_target_fps(60);
-    rl_handle.set_trace_log(TraceLogLevel::LOG_WARNING); // Suppress raylib INFO logs
+    rl_handle.set_target_fps(120);
+    rl_handle.set_trace_log(TraceLogLevel::LOG_WARNING);
     rl_handle.disable_cursor();
+    rl_handle.set_exit_key(None);
 
     // WARN: Experimental camera far plane clip modification
     unsafe {
