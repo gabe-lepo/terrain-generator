@@ -131,12 +131,10 @@ impl Chunk {
             }
         }
 
-        // We dont need to recalc heightmap since we wont use it for height queries
-        // Height queries will fall back to noise for async loaded chunks
         Self {
             coord,
             model,
-            heightmap: vec![], // We dont need it
+            heightmap: data.heightmap,
             bounding_box,
         }
     }

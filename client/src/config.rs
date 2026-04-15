@@ -20,7 +20,7 @@ pub const WINDOW_HEIGHT: i32 = 1440;
 // ============================================================================
 
 /// God mode or not (flying, higher speed, no collision)
-pub const GOD_MODE: bool = true;
+pub const GOD_MODE: bool = false;
 
 /// Player move speed
 pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 15.0 };
@@ -29,7 +29,7 @@ pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 15.0 };
 pub const GRAVITY_FORCE: f32 = 30.0;
 
 /// Jump force applied when jumping
-pub const JUMP_FORCE: f32 = 15.0;
+pub const JUMP_FORCE: f32 = 30.0;
 
 /// Sensitivity of mouse movements
 pub const MOUSE_SENSITIVITY: f32 = 0.003;

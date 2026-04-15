@@ -16,7 +16,6 @@ in Rust.
 ### Client
 
 - <b>_Figure out the screwy render distance + fog (shaders in general) issues_</b>
-- Fix non-god mode terrain model collision failure
 - Menu system
 - Menu-based configs
   - Allow user to enter server IP and port before connecting

@@ -1,5 +1,5 @@
 // WARN: Comment this after building out everything
-// #![allow(dead_code, unused)]
+#![allow(dead_code, unused)]
 mod biome;
 mod chunk;
 mod chunk_loader;
@@ -44,7 +44,7 @@ fn main() {
 
     rl_handle.set_target_fps(60);
     rl_handle.set_trace_log(TraceLogLevel::LOG_WARNING); // Suppress raylib INFO logs
-    rl_handle.disable_cursor(); // BUG: Breaks fog???
+    rl_handle.disable_cursor();
 
     // Player and terrain setup
     let mut player = Player::new(Vector3::new(0.0, 100.0, 0.0));

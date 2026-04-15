@@ -1,5 +1,5 @@
 use crate::biome::BiomeSystem;
-use crate::config::{CHUNK_SIZE, LACUNARITY, NOISE_FREQ, SEED, TERRAIN_RESOLUTION};
+use crate::config::{CHUNK_SIZE, GOD_MODE, LACUNARITY, NOISE_FREQ, SEED, TERRAIN_RESOLUTION};
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
 use std::sync::Arc;
@@ -20,6 +20,7 @@ pub struct ChunkData {
     pub indices: Vec<u16>,
     pub colors: Vec<Color>,
     pub bounding_box: BoundingBox,
+    pub heightmap: Vec<Vec<f32>>,
 }
 
 /// Handle for chunk throughput
@@ -96,7 +97,7 @@ async fn chunk_loader_task(
 
 /// Generate all chunk data, cpu only work here
 fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, biome_system: &BiomeSystem) -> ChunkData {
-    // Generate heightmap
+    // ALWAYS generate heightmap, only return it if not god mode
     let heightmap = generate_heightmap(coord, noise, biome_system);
 
     // Build mesh data
@@ -111,6 +112,7 @@ fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, biome_system: &BiomeSy
         indices,
         colors,
         bounding_box,
+        heightmap: if GOD_MODE { vec![] } else { heightmap },
     }
 }
 
