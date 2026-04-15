@@ -29,12 +29,6 @@ impl ShaderManager {
             self.fog_color_loc = shader.get_shader_location("fogColor");
             self.fog_near_loc = shader.get_shader_location("fogNear");
             self.fog_far_loc = shader.get_shader_location("fogFar");
-
-            println!("Shader uniform locations:");
-            println!("\tcameraPosition: {}", self.fog_camera_loc);
-            println!("\tfogColor: {}", self.fog_color_loc);
-            println!("\tfogNear: {}", self.fog_near_loc);
-            println!("\tfogFar: {}", self.fog_far_loc);
         } else {
             println!("ERROR: Fog shader failed to load");
         }

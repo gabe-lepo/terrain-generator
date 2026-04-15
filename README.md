@@ -15,7 +15,6 @@ in Rust.
 
 ### Client
 
-- <b>_Figure out the screwy render distance + fog (shaders in general) issues_</b>
 - Menu system
 - Menu-based configs
   - Allow user to enter server IP and port before connecting
@@ -23,8 +22,6 @@ in Rust.
   - client contacts server with version
   - server says update avail or not,
   - client downloads + installs
-- More biomes
-- Better biome definition system
 - Shader-based lighting
 - Objects! I.e. something to do in the game...
 - Fix obvious visual lines between biomes (color and height)

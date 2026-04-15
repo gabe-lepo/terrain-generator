@@ -72,11 +72,6 @@ pub const CHUNK_SIZE: i32 = 16;
 /// Smaller = more detailed terrain, more vertices
 pub const TERRAIN_RESOLUTION: f32 = 10.0;
 
-/// How many chunks to load in each direction from player
-/// Total chunks = (VIEW_DISTANCE * 2 + 1)^2
-/// 25 = 51x51 grid = 2,601 chunks
-pub const VIEW_DISTANCE: i32 = 100;
-
 /// Base frequency for Perlin noise sampling
 /// Lower = larger, smoother terrain features
 /// Higher = smaller, more detailed features
@@ -103,14 +98,12 @@ pub const RENDER_WIREFRAME: bool = false;
 /// Higher = render farther (lower FPS), Lower = cull more (higher FPS)
 pub const MAX_DISTANCE_BUFFER: f32 = 2.0;
 
-/// Fog start distance as percentage of max render distance (0.0 - 1.0)
-pub const FOG_NEAR_PERCENT: f32 = 0.5;
-
-/// Fog full opacity distance as percentage of max render distance (0.0 - 1.0)
-pub const FOG_FAR_PERCENT: f32 = 0.7;
+/// Fog start/end distances as ratio of max render distance
+pub const FOG_NEAR_PERCENT: f32 = 0.3;
+pub const FOG_FAR_PERCENT: f32 = 0.4;
 
 /// Fog color
-pub const FOG_COLOR: Color = Color::RED;
+pub const FOG_COLOR: Color = Color::DEEPSKYBLUE;
 
 /// Minimum world height
 pub const WORLD_MIN_Y: f32 = -100.0;
@@ -118,8 +111,15 @@ pub const WORLD_MIN_Y: f32 = -100.0;
 /// Maximum world height
 pub const WORLD_MAX_Y: f32 = 2_000.0;
 
-// Config
+/// Async chunk loader thread pool size
 pub const CHUNK_LOADER_THREAD_POOLS: usize = 4;
+
+/// Raylib camera max plane clip distance
+pub const FAR_CLIP_PLANE_DISTANCE: f32 =
+    (VIEW_DISTANCE as f32) * (CHUNK_SIZE as f32) * TERRAIN_RESOLUTION;
+
+/// How many chunks to load in each direction from player
+pub const VIEW_DISTANCE: i32 = 75;
 
 // ============================================================================
 // BIOME DEFINITIONS

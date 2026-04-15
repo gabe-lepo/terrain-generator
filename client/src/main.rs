@@ -11,7 +11,7 @@ mod shaders;
 mod terrain_manager;
 mod world;
 
-use config::{WINDOW_HEIGHT, WINDOW_WIDTH};
+use config::{FAR_CLIP_PLANE_DISTANCE, WINDOW_HEIGHT, WINDOW_WIDTH};
 use network::{
     NetworkEvent, ServerConfig, round_position, should_send_position_update, spawn_network_task,
 };
@@ -50,7 +50,7 @@ fn main() {
 
     // WARN: Experimental camera far plane clip modification
     unsafe {
-        raylib::ffi::rlSetClipPlanes(0.01, 5000.0);
+        raylib::ffi::rlSetClipPlanes(0.01, FAR_CLIP_PLANE_DISTANCE as f64);
     }
 
     // Player and terrain setup

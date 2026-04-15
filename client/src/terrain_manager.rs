@@ -2,8 +2,8 @@ use crate::biome::BiomeSystem;
 use crate::chunk::{Chunk, ChunkCoord};
 use crate::chunk_loader::ChunkLoader;
 use crate::config::{
-    CHUNK_SIZE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT, MAX_DISTANCE_BUFFER, RENDER_WIREFRAME, SEED,
-    TERRAIN_RESOLUTION, VIEW_DISTANCE,
+    CHUNK_SIZE, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT, MAX_DISTANCE_BUFFER,
+    RENDER_WIREFRAME, SEED, TERRAIN_RESOLUTION, VIEW_DISTANCE,
 };
 use crate::shaders::ShaderManager;
 use crate::world::WorldQuery;
@@ -52,20 +52,29 @@ impl TerrainManager {
     ) {
         let current_chunk = ChunkCoord::from_world_pos(player_pos.x, player_pos.z);
 
+        // PERF:
         // Poll for completed chunks and upload to gpu
-        while let Some(chunk_data) = self.chunk_loader.poll_completed() {
-            let coord = ChunkCoord::new(chunk_data.coord.0, chunk_data.coord.1);
+        // - Cap chunk uploads per frame
+        // - Unless loading initial chunks, then no effective cap with max usize
 
-            // Build final chunk with gpu upload
-            // Don't apply fog shader in wireframe mode
-            let shader = if RENDER_WIREFRAME { None } else { fog_shader };
-            let chunk = Chunk::from_data(chunk_data, rl, thread, shader);
-            self.chunks.insert(coord, chunk);
-            self.pending_chunks.remove(&coord);
+        // let expected_chunks = ((VIEW_DISTANCE * 2 + 1) * (VIEW_DISTANCE * 2 + 1)) as usize;
+        // let initial_load_complete = self.chunks.len() >= expected_chunks;
+        // let upload_cap = if initial_load_complete { 8 } else { usize::MAX };
+        let mut uploaded_this_frame = 0;
+        while uploaded_this_frame < 8 {
+            if let Some(chunk_data) = self.chunk_loader.poll_completed() {
+                let coord = ChunkCoord::new(chunk_data.coord.0, chunk_data.coord.1);
+                let shader = if RENDER_WIREFRAME { None } else { fog_shader };
+                let chunk = Chunk::from_data(chunk_data, rl, thread, shader);
+                self.chunks.insert(coord, chunk);
+                self.pending_chunks.remove(&coord);
+                uploaded_this_frame += 1;
+            } else {
+                break;
+            }
         }
 
         // Only update chunks if player moved to different chunk
-        // PERF: There may be a better way to trigger chunk load
         if self.last_player_chunk == Some(current_chunk) {
             return;
         }
@@ -74,6 +83,9 @@ impl TerrainManager {
 
         // Determine which chunks should load
         let mut chunks_to_keep = std::collections::HashSet::new();
+
+        // Cap chunk load requests
+        let mut new_requests: Vec<(i32, ChunkCoord)> = Vec::new();
 
         for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
             for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
@@ -84,11 +96,18 @@ impl TerrainManager {
                 if !self.chunks.contains_key(&chunk_coord)
                     && !self.pending_chunks.contains(&chunk_coord)
                 {
-                    self.chunk_loader
-                        .request_chunk((chunk_coord.x, chunk_coord.z));
-                    self.pending_chunks.insert(chunk_coord);
+                    let dist_sq = dx * dx + dz * dz;
+                    new_requests.push((dist_sq, chunk_coord));
                 }
             }
+        }
+
+        // Sort nearest to player before loading
+        new_requests.sort_unstable_by_key(|(d, _)| *d);
+
+        for (_, coord) in new_requests {
+            self.chunk_loader.request_chunk((coord.x, coord.z));
+            self.pending_chunks.insert(coord);
         }
 
         // Unload chunks outside view distance
@@ -131,13 +150,11 @@ impl TerrainManager {
         self.last_rendered_count
     }
 
-    /// Calculate fog distances based on current VIEW_DISTANCE
+    /// Calculate fog distances based on visible distance
     pub fn get_fog_distances(&self) -> (f32, f32) {
-        // Max render distance in world units
-        let max_distance = (VIEW_DISTANCE as f32) * (CHUNK_SIZE as f32) * TERRAIN_RESOLUTION;
-
-        let fog_near = max_distance * FOG_NEAR_PERCENT;
-        let fog_far = max_distance * FOG_FAR_PERCENT;
+        let visible_distance = FAR_CLIP_PLANE_DISTANCE * 0.5;
+        let fog_near = FOG_NEAR_PERCENT * visible_distance;
+        let fog_far = FOG_FAR_PERCENT * visible_distance;
 
         (fog_near, fog_far)
     }
