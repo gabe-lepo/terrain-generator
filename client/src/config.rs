@@ -87,7 +87,7 @@ pub const CROUCH_MULTIPLIER: f32 = 0.5;
 // ============================================================================
 
 /// Enable/disable network connection attempts
-pub const CONNECT: bool = false;
+pub const CONNECT: bool = true;
 
 /// Position updates sent per second
 /// Higher = smoother movement, more bandwidth

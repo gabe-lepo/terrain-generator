@@ -1,7 +1,12 @@
+// WARN: Comment this after building out everything
+// #![allow(dead_code, unused)]
 mod client;
 
 use client::Client;
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -27,6 +32,9 @@ async fn main() {
     let registry: Arc<Mutex<Vec<Client>>> = Arc::new(Mutex::new(Vec::new()));
     let mut next_session: u32 = 1;
 
+    // Start time of day state
+    let server_start = Instant::now();
+
     // Main accept loop
     loop {
         // Accept connection
@@ -43,6 +51,30 @@ async fn main() {
         let client = Client::new(addr, session, tx);
         let client_id = client.id;
         registry_guard.push(client);
+
+        // Send time sync message to client
+        // TODO:
+        // - Create shared config for these consts
+        // - Offload this message send to a helper
+        // - current_hour is only calc'd on new connection. Maybe send it to a
+        //   thread for persistent time tracking
+        const STARTING_HOUR: f32 = 6.0;
+        const TIME_SPEED_10_MIN: f32 = 600.0;
+        const TIME_SPEED_DEBUG: f32 = 6000.0;
+        const HOURS_IN_DAY: f32 = 24.0;
+        const SECONDS_IN_HOUR: f32 = 3600.0;
+        let elapsed_hours =
+            server_start.elapsed().as_secs_f32() * TIME_SPEED_DEBUG / SECONDS_IN_HOUR;
+        let current_hour = (STARTING_HOUR + elapsed_hours).rem_euclid(HOURS_IN_DAY);
+        let time_sync_msg = ServerMessage::TimeSync { hour: current_hour };
+        let serialized =
+            serde_json::to_string(&time_sync_msg).expect("time sync serialization failure") + "\n";
+        let _ = registry_guard.iter().find(|c| c.id == client_id).map(|c| {
+            if let Err(e) = c.tx.try_send(serialized) {
+                println!("Failed to send time sync msg: {e}");
+            }
+        });
+
         drop(registry_guard);
 
         let registry_clone = Arc::clone(&registry);
@@ -50,6 +82,9 @@ async fn main() {
         println!(
             "New client connection:\n\tFrom: {addr}\n\tClient ID: {client_id}\n\tSession: {session}\n"
         );
+
+        // Send time of day sync
+
         // Thread the connection handler
         tokio::spawn(async move {
             handle_connection(socket, client_id, rx, registry_clone).await;
@@ -110,11 +145,11 @@ async fn handle_connection(
                                         // TODO: Handle Result<> from try_send properly...
                                         let _ = other.tx.try_send(serialized.clone());
                                     }
-                                    println!("PositionUpdate:\n\tClient: {client_id}\n\tSession: {session}\n\tNew Position: x:{}|y:{}|z:{}\n",
-                                        position.x,
-                                        position.y,
-                                        position.z
-                                    );
+                                    // println!("PositionUpdate:\n\tClient: {client_id}\n\tSession: {session}\n\tNew Position: x:{}|y:{}|z:{}\n",
+                                    //     position.x,
+                                    //     position.y,
+                                    //     position.z
+                                    // );
                                     // TODO: We dont actually update the player pos yet!
                                 }
                                 Err(e) => {

@@ -91,7 +91,7 @@ fn main() {
         let dt = rl_handle.get_frame_time();
 
         // Advance time
-        time_of_day.advance(dt, TIME_SPEED_10_MIN);
+        time_of_day.advance(dt, TIME_SPEED_DEBUG);
 
         // Process network events
         while let Ok(event) = network_events.try_recv() {
