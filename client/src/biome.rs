@@ -1,4 +1,7 @@
-use crate::config::{BIOME_FREQ, DESERT, EXTREME_MOUNTAINS, HILLS, MOUNTAINS, SEED};
+use crate::config::{
+    BIOME_FREQ, DESERT, EXTREME_MOUNTAINS, FLAT_MODEL_COLOR, HILLS, MOUNTAINS, SEED,
+    USE_FLAT_MODEL_COLOR,
+};
 
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
@@ -150,8 +153,16 @@ impl BiomeSystem {
             EXTREME_MOUNTAINS.base_height,
             EXTREME_MOUNTAINS.octaves,
             EXTREME_MOUNTAINS.persistence,
-            EXTREME_MOUNTAINS.base_color,
-            EXTREME_MOUNTAINS.peak_color,
+            if USE_FLAT_MODEL_COLOR {
+                FLAT_MODEL_COLOR
+            } else {
+                EXTREME_MOUNTAINS.base_color
+            },
+            if USE_FLAT_MODEL_COLOR {
+                FLAT_MODEL_COLOR
+            } else {
+                EXTREME_MOUNTAINS.peak_color
+            },
             EXTREME_MOUNTAINS.color_power,
         )
     }
@@ -163,8 +174,16 @@ impl BiomeSystem {
             MOUNTAINS.base_height,
             MOUNTAINS.octaves,
             MOUNTAINS.persistence,
-            MOUNTAINS.base_color,
-            MOUNTAINS.peak_color,
+            if USE_FLAT_MODEL_COLOR {
+                FLAT_MODEL_COLOR
+            } else {
+                MOUNTAINS.base_color
+            },
+            if USE_FLAT_MODEL_COLOR {
+                FLAT_MODEL_COLOR
+            } else {
+                MOUNTAINS.peak_color
+            },
             MOUNTAINS.color_power,
         )
     }
@@ -176,8 +195,16 @@ impl BiomeSystem {
             HILLS.base_height,
             HILLS.octaves,
             HILLS.persistence,
-            HILLS.base_color,
-            HILLS.peak_color,
+            if USE_FLAT_MODEL_COLOR {
+                FLAT_MODEL_COLOR
+            } else {
+                HILLS.base_color
+            },
+            if USE_FLAT_MODEL_COLOR {
+                FLAT_MODEL_COLOR
+            } else {
+                HILLS.peak_color
+            },
             HILLS.color_power,
         )
     }
@@ -189,8 +216,16 @@ impl BiomeSystem {
             DESERT.base_height,
             DESERT.octaves,
             DESERT.persistence,
-            DESERT.base_color,
-            DESERT.peak_color,
+            if USE_FLAT_MODEL_COLOR {
+                FLAT_MODEL_COLOR
+            } else {
+                DESERT.base_color
+            },
+            if USE_FLAT_MODEL_COLOR {
+                FLAT_MODEL_COLOR
+            } else {
+                DESERT.peak_color
+            },
             DESERT.color_power,
         )
     }

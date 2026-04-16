@@ -21,6 +21,7 @@ pub struct ChunkData {
     pub colors: Vec<Color>,
     pub bounding_box: BoundingBox,
     pub heightmap: Vec<Vec<f32>>,
+    pub normals: Vec<[f32; 3]>,
 }
 
 /// Handle for chunk throughput
@@ -106,6 +107,9 @@ fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, biome_system: &BiomeSy
     // Calc bounding box
     let bounding_box = calculate_bounding_box(coord, &heightmap);
 
+    // Normals
+    let normals = compute_normals(&heightmap);
+
     ChunkData {
         coord,
         vertices,
@@ -113,6 +117,7 @@ fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, biome_system: &BiomeSy
         colors,
         bounding_box,
         heightmap: if GOD_MODE { vec![] } else { heightmap },
+        normals,
     }
 }
 
@@ -264,4 +269,33 @@ fn calculate_bounding_box(coord: (i32, i32), heightmap: &Vec<Vec<f32>>) -> Bound
         Vector3::new(world_x, min_height, world_z),
         Vector3::new(world_x + chunk_size, max_height, world_z + chunk_size),
     )
+}
+
+fn compute_normals(heightmap: &[Vec<f32>]) -> Vec<[f32; 3]> {
+    let grid_size = heightmap.len();
+    let mut normals = Vec::with_capacity(grid_size * grid_size);
+    let last = grid_size - 1;
+
+    for z in 0..grid_size {
+        for x in 0..grid_size {
+            // Pick two adjacent X indices: forward if possible, backwards at right edge of chunk
+            let (x_a, x_b) = if x < last {
+                (x, x + 1) // Forward diff
+            } else {
+                (x - 1, x) // Backwards diff at last column
+            };
+
+            // Same thing for Z
+            let (z_a, z_b) = if z < last { (z, z + 1) } else { (z - 1, z) };
+
+            let nx = heightmap[z][x_a] - heightmap[z][x_b];
+            let ny = TERRAIN_RESOLUTION;
+            let nz = heightmap[z_a][x] - heightmap[z_b][x];
+
+            let len = (nx * nx + ny * ny + nz * nz).sqrt();
+            normals.push([nx / len, ny / len, nz / len]);
+        }
+    }
+
+    normals
 }

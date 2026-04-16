@@ -3,7 +3,48 @@
 //! All gameplay and rendering constants in one place for easy tweaking.
 //! Just change values here and recompile - no need to hunt through modules.
 
-use raylib::prelude::Color;
+use raylib::{ffi::Vector3, prelude::Color};
+
+// ============================================================================
+// LIGHTING & TIME OF DAY
+// ============================================================================
+
+pub const STARTING_HOUR: f32 = 10.0;
+pub const TIME_SPEED_MUTLIPLIER: f32 = 60.0;
+
+pub const SUN_COLOR: Color = Color::new(255, 242, 204, 255);
+pub const SUN_MAX_INTENSITY: f32 = 0.8;
+pub const AMBIENT_DAY: f32 = 0.35;
+pub const AMBIENT_NIGHT: f32 = 0.08;
+
+/// Hour thresholds for sun/sky transitions
+pub const SUNRISE_START: f32 = 5.0;
+pub const SUNRISE_END: f32 = 7.0;
+pub const SUNSET_START: f32 = 17.0;
+pub const SUNSET_END: f32 = 19.0;
+
+/// Hour thresholds for sky color transitions
+/// (sky blends: night -> sunrise color -> day color | day color -> sunset color -> night)
+pub const SKY_SUNRISE_MID: f32 = 6.5;
+pub const SKY_DAY_START: f32 = 8.0;
+pub const SKY_DAY_END: f32 = 16.0;
+pub const SKY_SUNSET_MID: f32 = 17.5;
+
+/// Sky colors at each phase
+pub const SKY_COLOR_NIGHT: Color = Color::new(3, 3, 8, 255);
+pub const SKY_COLOR_SUNRISE: Color = Color::new(230, 102, 38, 255);
+pub const SKY_COLOR_DAY: Color = Color::new(102, 178, 255, 255);
+
+/// Sun direction presets (intentionally private -- use SUN_DIRECTION)
+const SUN_DIR_HIGH: [f32; 3] = [0.0, 1.0, 0.0];
+const SUN_DIR_ANGLED: [f32; 3] = [0.5, 0.7, 0.3];
+const SUN_DIR_LOW: [f32; 3] = [0.8, 0.4, 0.2];
+
+/// Active sun direction
+pub const SUN_DIRECTION: [f32; 3] = SUN_DIR_ANGLED;
+
+/// Ambient light floor (0.0 black shadows, 1.0 no shading effect)
+pub const AMBIENT_STRENGTH: f32 = 0.15;
 
 // ============================================================================
 // GENERAL GAME CLIENT OPTIONS
@@ -68,8 +109,7 @@ pub const SEED: u32 = 12345;
 pub const CHUNK_SIZE: i32 = 16;
 
 /// World units per vertex in the heightmap
-/// Larger = more spread out terrain, fewer vertices
-/// Smaller = more detailed terrain, more vertices
+/// WARN: BREAKS FOG DISTANCE CALCS IF CHANGED
 pub const TERRAIN_RESOLUTION: f32 = 10.0;
 
 /// Base frequency for Perlin noise sampling
@@ -90,8 +130,7 @@ pub const BIOME_FREQ: f64 = 0.0005;
 // RENDERING
 // ============================================================================
 
-/// If true, render wireframe only (no fog)
-/// If false, render solid with fog shader
+/// If true, render wireframe only (no shaders, no models)
 pub const RENDER_WIREFRAME: bool = false;
 
 /// Multiplier for frustum culling distance beyond view distance
@@ -103,7 +142,12 @@ pub const FOG_NEAR_PERCENT: f32 = 0.3;
 pub const FOG_FAR_PERCENT: f32 = 0.4;
 
 /// Fog color
-pub const FOG_COLOR: Color = Color::DEEPSKYBLUE;
+pub const FOG_DEBUG: bool = false;
+pub const FOG_COLOR: Color = if FOG_DEBUG {
+    Color::RED
+} else {
+    Color::DEEPSKYBLUE
+};
 
 /// Minimum world height
 pub const WORLD_MIN_Y: f32 = -100.0;
@@ -173,16 +217,20 @@ impl BiomeConfig {
     }
 }
 
+/// Flat model color for debugging
+pub const USE_FLAT_MODEL_COLOR: bool = false;
+pub const FLAT_MODEL_COLOR: Color = Color::WHITE;
+
 /// Extreme mountains, like mountains but more mountain
 pub const EXTREME_MOUNTAINS: BiomeConfig = BiomeConfig::new(
     "Extreme Mountains",
-    500.0,
+    300.0,
     200.0,
-    12,
-    0.5,
-    Color::new(255, 255, 255, 255),
-    Color::new(0, 0, 0, 255),
-    3.5,
+    5,
+    0.25,
+    Color::new(192, 192, 192, 255),
+    Color::new(0, 0, 255, 255),
+    6.5,
     0.1,
 );
 
@@ -190,10 +238,10 @@ pub const EXTREME_MOUNTAINS: BiomeConfig = BiomeConfig::new(
 pub const MOUNTAINS: BiomeConfig = BiomeConfig::new(
     "Mountains",
     200.0,
-    40.0,
+    75.0,
     6,
-    0.5,
-    Color::new(50, 50, 50, 255),
+    0.25,
+    Color::DARKBROWN,
     Color::new(255, 255, 255, 255),
     3.5,
     0.5,
@@ -203,10 +251,10 @@ pub const MOUNTAINS: BiomeConfig = BiomeConfig::new(
 pub const HILLS: BiomeConfig = BiomeConfig::new(
     "Hills",
     75.0,
-    10.0,
+    20.0,
     2,
-    0.5,
-    Color::new(0, 150, 0, 255),
+    0.25,
+    Color::DARKOLIVEGREEN,
     Color::new(100, 255, 100, 255),
     1.0,
     1.0,
@@ -218,7 +266,7 @@ pub const DESERT: BiomeConfig = BiomeConfig::new(
     20.0,
     0.0,
     1,
-    0.5,
+    0.025,
     Color::new(200, 180, 100, 255),
     Color::new(220, 200, 130, 255),
     0.3,

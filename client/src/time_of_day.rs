@@ -1,0 +1,104 @@
+use crate::config::{
+    AMBIENT_DAY, AMBIENT_NIGHT, SKY_COLOR_DAY, SKY_COLOR_NIGHT, SKY_COLOR_SUNRISE, SKY_DAY_END,
+    SKY_DAY_START, SKY_SUNRISE_MID, SKY_SUNSET_MID, SUNRISE_END, SUNRISE_START, SUNSET_END,
+    SUNSET_START,
+};
+use raylib::prelude::Color;
+
+const HOURS_IN_DAY: f32 = 24.0;
+const SECONDS_IN_HOUR: f32 = 3600.0;
+
+pub struct TimeOfDay {
+    hour: f32,
+    paused: bool,
+}
+
+impl TimeOfDay {
+    pub fn new(hour: f32) -> Self {
+        Self {
+            hour: hour.rem_euclid(HOURS_IN_DAY),
+            paused: false,
+        }
+    }
+
+    pub fn hour(&self) -> f32 {
+        self.hour
+    }
+
+    pub fn toggle_pause(&mut self) {
+        self.paused = !self.paused;
+    }
+
+    pub fn set_hour(&mut self, hour: f32) {
+        self.hour = hour.rem_euclid(HOURS_IN_DAY);
+    }
+
+    pub fn advance(&mut self, dt: f32, speed: f32) {
+        if self.paused {
+            println!("WARNING: Tried to advance time of day while paused");
+            return;
+        }
+
+        self.hour = (self.hour + dt * speed / SECONDS_IN_HOUR).rem_euclid(HOURS_IN_DAY);
+    }
+
+    pub fn sun_direction(&self) -> [f32; 3] {
+        // No direction if between night/morning hours
+        if self.hour < SUNRISE_START || self.hour > SUNSET_END {
+            return [0.0, -1.0, 0.0];
+        }
+
+        let angle = (self.hour - 6.0) / (HOURS_IN_DAY / 2.0) * std::f32::consts::PI;
+
+        let x = angle.cos();
+        let y = angle.sin();
+        let z = 0.3; // ?
+
+        let len = (x * x + y * y + z * z).sqrt();
+
+        [x / len, y / len, z / len]
+    }
+
+    pub fn sun_intensity(&self) -> f32 {
+        if self.hour < SUNRISE_START || self.hour > SUNSET_END {
+            0.0
+        } else if self.hour < SUNRISE_END {
+            (self.hour - SUNRISE_START) / (SUNRISE_END - SUNRISE_START)
+        } else if self.hour > SUNSET_START {
+            (SUNSET_END - self.hour) / (SUNSET_END - SUNSET_START)
+        } else {
+            1.0
+        }
+    }
+
+    pub fn ambient_strength(&self) -> f32 {
+        let t = self.sun_intensity();
+        AMBIENT_NIGHT + (AMBIENT_DAY - AMBIENT_NIGHT) * t
+    }
+
+    pub fn sky_color(&self) -> Color {
+        let mut t: f32;
+
+        if self.hour < SUNRISE_START || self.hour > SUNSET_END {
+            SKY_COLOR_NIGHT
+        } else if self.hour < SKY_SUNRISE_MID {
+            t = (self.hour - SUNRISE_START) / (SKY_SUNRISE_MID - SUNRISE_START);
+            SKY_COLOR_NIGHT.lerp(SKY_COLOR_SUNRISE, t)
+        } else if self.hour < SKY_DAY_START {
+            t = (self.hour - SKY_SUNRISE_MID) / (SKY_DAY_START - SKY_SUNRISE_MID);
+            SKY_COLOR_SUNRISE.lerp(SKY_COLOR_DAY, t)
+        } else if self.hour < SKY_DAY_END {
+            SKY_COLOR_DAY
+        } else if self.hour < SKY_SUNSET_MID {
+            t = (self.hour - SKY_DAY_END) / (SKY_SUNSET_MID - SKY_DAY_END);
+            SKY_COLOR_DAY.lerp(SKY_COLOR_SUNRISE, t)
+        } else {
+            t = (self.hour - SKY_SUNSET_MID) / (SUNSET_END - SKY_SUNSET_MID);
+            SKY_COLOR_SUNRISE.lerp(SKY_COLOR_NIGHT, t)
+        }
+    }
+
+    pub fn fog_color(&self) -> Color {
+        self.sky_color()
+    }
+}

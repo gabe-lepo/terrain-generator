@@ -56,6 +56,7 @@ impl Chunk {
         let indices = data.indices;
         let colors = data.colors;
         let bounding_box = data.bounding_box;
+        let normals = data.normals;
 
         // WARN: Unsafe FFI calls
         // Build mesh from pre-generated data
@@ -73,9 +74,7 @@ impl Chunk {
                 .collect();
 
             // Normals (simple up pointing for now)
-            let normals_flat: Vec<f32> = (0..vertices.len())
-                .flat_map(|_| vec![0.0, 1.0, 0.0])
-                .collect();
+            let normals_flat: Vec<f32> = normals.iter().flat_map(|n| [n[0], n[1], n[2]]).collect();
 
             // Copy
             let vertices_ptr =

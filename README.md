@@ -22,11 +22,11 @@ in Rust.
   - client contacts server with version
   - server says update avail or not,
   - client downloads + installs
-- Shader-based lighting
 - Objects! I.e. something to do in the game...
 - Fix obvious visual lines between biomes (color and height)
-- Move configs to shared, in case we need more complex server configs
+- Improve generation (erosion? DLA?)
 - Reduce RAM usage with higher view distances
+- Move configs to shared, in case we need more complex server configs
 
 ## Running
 

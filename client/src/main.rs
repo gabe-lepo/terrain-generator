@@ -9,9 +9,11 @@ mod player;
 mod remote_player;
 mod shaders;
 mod terrain_manager;
+mod time_of_day;
+mod utils;
 mod world;
 
-use config::{FAR_CLIP_PLANE_DISTANCE, WINDOW_HEIGHT, WINDOW_WIDTH};
+use config::{FAR_CLIP_PLANE_DISTANCE, SUN_COLOR, WINDOW_HEIGHT, WINDOW_WIDTH};
 use network::{
     NetworkEvent, ServerConfig, round_position, should_send_position_update, spawn_network_task,
 };
@@ -22,9 +24,11 @@ use shaders::ShaderManager;
 use std::collections::HashMap;
 use sysinfo::System;
 use terrain_manager::TerrainManager;
+use time_of_day::*;
+use utils::*;
 use uuid::Uuid;
 
-use crate::config::FOG_COLOR;
+use crate::config::{AMBIENT_STRENGTH, FOG_COLOR, SUN_DIRECTION};
 
 const BACKGROUND_COLOR: Color = Color::DEEPSKYBLUE;
 
@@ -55,7 +59,7 @@ fn main() {
     }
 
     // Player and terrain setup
-    let mut player = Player::new(Vector3::new(-228.0, 308.0, 62.0));
+    let mut player = Player::new(Vector3::new(-705.0, 50.0, 227.0));
     let mut terrain_manager = TerrainManager::new();
 
     // Shader setup
@@ -76,7 +80,7 @@ fn main() {
         };
 
         // Update chunks based on player pos (pass fog shader so new chunks get it applied)
-        let fog_shader = shader_manager.get_fog_shader();
+        let fog_shader = shader_manager.get_terrain_shader();
         terrain_manager.update(player.position, &mut rl_handle, &rl_thread, fog_shader);
 
         let dt = rl_handle.get_frame_time();
@@ -138,7 +142,16 @@ fn main() {
                 fog_near,
                 fog_far,
                 FOG_COLOR,
+                SUN_DIRECTION,
+                SUN_COLOR,
+                1.0,              // Try something higher
+                AMBIENT_STRENGTH, // Will be replaced when server sends dynamic TOD values
             );
+
+            // Temporary static sun ball thing
+            let sun_pos = player.position
+                + Vector3::new(SUN_DIRECTION[0], SUN_DIRECTION[1], SUN_DIRECTION[2]) * 500.0;
+            draw3d_handle.draw_sphere(sun_pos, 100.0, Color::LIGHTGOLDENRODYELLOW);
 
             // Render remote players
             for remote_player in remote_players.values() {

@@ -130,11 +130,24 @@ impl TerrainManager {
         fog_near: f32,
         fog_far: f32,
         fog_color: Color,
+        sun_direction: [f32; 3],
+        sun_color: Color,
+        sun_intensity: f32,
+        ambient_strength: f32,
     ) {
         let mut rendered_count = 0;
 
         // Update shader uniforms once before rendering (shaders already set on chunk materials)
-        shader_manager.update_fog_shader(camera, fog_near, fog_far, fog_color);
+        shader_manager.update_terrain_shader(
+            camera,
+            fog_near,
+            fog_far,
+            fog_color,
+            sun_direction,
+            sun_color,
+            sun_intensity,
+            ambient_strength,
+        );
 
         // Render chunks
         for chunk in self.chunks.values() {
