@@ -24,9 +24,13 @@ use shaders::ShaderManager;
 use std::collections::HashMap;
 use sysinfo::System;
 use terrain_manager::TerrainManager;
+use time_of_day::TimeOfDay;
 use uuid::Uuid;
 
-use crate::config::{AMBIENT_STRENGTH, FOG_COLOR, RENDER_WIREFRAME, SUN_DIRECTION};
+use crate::config::{
+    AMBIENT_STRENGTH, FOG_COLOR, RENDER_WIREFRAME, SUN_DIRECTION, SUNRISE_START, SUNSET_END,
+    TIME_SPEED_10_MIN, TIME_SPEED_DEBUG, TIME_STARTING_HOUR,
+};
 
 const BACKGROUND_COLOR: Color = Color::DEEPSKYBLUE;
 
@@ -67,6 +71,9 @@ fn main() {
     // timers
     let mut last_position_update = 0.0;
 
+    // Time of day setup
+    let mut time_of_day = TimeOfDay::new(TIME_STARTING_HOUR);
+
     // Main loop
     while !rl_handle.window_should_close() {
         // Process memory usage
@@ -82,6 +89,9 @@ fn main() {
         terrain_manager.update(player.position, &mut rl_handle, &rl_thread, fog_shader);
 
         let dt = rl_handle.get_frame_time();
+
+        // Advance time
+        time_of_day.advance(dt, TIME_SPEED_10_MIN);
 
         // Process network events
         while let Ok(event) = network_events.try_recv() {
@@ -106,12 +116,16 @@ fn main() {
                     remote_players.remove(&player_id);
                     println!("Player {} disconnected", player_id);
                 }
+                NetworkEvent::TimeSync { hour } => {
+                    time_of_day.set_hour(hour);
+                    println!("Time synced: {:.2}", hour);
+                }
             }
         }
 
         // Send position to server at configured rate
         if should_send_position_update(&mut last_position_update, dt) {
-            let rounded_pos = round_position(shared::Vec3::new(
+            let rounded_pos = round_position(shared::NetworkVec3::new(
                 player.position.x,
                 player.position.y,
                 player.position.z,
@@ -127,7 +141,7 @@ fn main() {
 
         // 2d drawing setup before 3d
         let mut draw_handle = rl_handle.begin_drawing(&rl_thread);
-        draw_handle.clear_background(BACKGROUND_COLOR);
+        draw_handle.clear_background(time_of_day.sky_color());
 
         {
             // 3D drawing
@@ -139,20 +153,19 @@ fn main() {
                 &shader_manager,
                 fog_near,
                 fog_far,
-                FOG_COLOR,
-                SUN_DIRECTION,
-                SUN_COLOR,
-                1.0,              // Try something higher
-                AMBIENT_STRENGTH, // Will be replaced when server sends dynamic TOD values
+                time_of_day.fog_color(),
+                time_of_day.sun_direction(),
+                Color::LIGHTGOLDENRODYELLOW,
+                time_of_day.sun_intensity(),
+                time_of_day.ambient_strength(),
             );
 
             // Temporary static sun ball thing
-            let sun_pos = player.position
-                + Vector3::new(SUN_DIRECTION[0], SUN_DIRECTION[1], SUN_DIRECTION[2]) * 500.0;
+            let sun_pos = player.position + time_of_day.sun_direction() * 5000.0;
             if RENDER_WIREFRAME {
-                draw3d_handle.draw_sphere_wires(sun_pos, 100.0, 10, 10, Color::BLACK);
+                draw3d_handle.draw_sphere_wires(sun_pos, 1000.0, 10, 10, Color::BLACK);
             } else {
-                draw3d_handle.draw_sphere(sun_pos, 100.0, Color::LIGHTGOLDENRODYELLOW);
+                draw3d_handle.draw_sphere(sun_pos, 1000.0, Color::LIGHTGOLDENRODYELLOW);
             }
 
             // Render remote players
@@ -161,7 +174,13 @@ fn main() {
             }
         }
 
-        draw_stats(&mut draw_handle, &player, used_mb, &terrain_manager);
+        draw_stats(
+            &mut draw_handle,
+            &player,
+            used_mb,
+            &terrain_manager,
+            &time_of_day,
+        );
     }
 }
 
@@ -170,7 +189,14 @@ fn draw_stats(
     player: &Player,
     used_mb: f32,
     terrain_manager: &TerrainManager,
+    time_of_day: &TimeOfDay,
 ) {
+    let text_color = if time_of_day.hour() < SUNRISE_START || time_of_day.hour() > SUNSET_END {
+        Color::WHITE
+    } else {
+        Color::BLACK
+    };
+
     // FPS
     d.draw_fps(10, 10);
 
@@ -185,7 +211,7 @@ fn draw_stats(
         10,
         30,
         20,
-        Color::BLACK,
+        text_color,
     );
 
     // Memory usage
@@ -194,7 +220,7 @@ fn draw_stats(
         10,
         50,
         20,
-        Color::BLACK,
+        text_color,
     );
 
     // Rendered versus mapped chunks
@@ -207,7 +233,7 @@ fn draw_stats(
         10,
         70,
         20,
-        Color::BLACK,
+        text_color,
     );
 
     // Biome names
@@ -216,6 +242,15 @@ fn draw_stats(
         10,
         90,
         20,
-        Color::BLACK,
+        text_color,
+    );
+
+    // Time of day
+    d.draw_text(
+        &format!("Time: {:.2}", time_of_day.hour()),
+        10,
+        110,
+        20,
+        text_color,
     );
 }

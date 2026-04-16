@@ -1,18 +1,18 @@
 use raylib::prelude::*;
-use shared::Vec3;
+use shared::NetworkVec3;
 use uuid::Uuid;
 
 pub struct RemotePlayer {
     pub id: Uuid,
-    pub position: Vec3,
+    pub position: NetworkVec3,
 }
 
 impl RemotePlayer {
-    pub fn new(id: Uuid, position: Vec3) -> Self {
+    pub fn new(id: Uuid, position: NetworkVec3) -> Self {
         Self { id, position }
     }
 
-    pub fn update_position(&mut self, position: Vec3) {
+    pub fn update_position(&mut self, position: NetworkVec3) {
         self.position = position;
     }
 

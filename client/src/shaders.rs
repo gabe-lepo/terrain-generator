@@ -1,7 +1,7 @@
 use raylib::ffi;
 use raylib::prelude::*;
 
-use crate::utils::color_to_f32;
+use crate::utils::{color_to_f32, rl_to_primitive_vec3};
 
 pub struct ShaderManager {
     terrain_shader: Option<Shader>,
@@ -59,7 +59,7 @@ impl ShaderManager {
         fog_near: f32,
         fog_far: f32,
         fog_color: Color,
-        sun_direction: [f32; 3], // TODO: Use Vector3, transform to raw vector at FFI boundary
+        sun_direction: Vector3,
         sun_color: Color,
         sun_intensity: f32,
         ambient_strength: f32,
@@ -102,10 +102,11 @@ impl ShaderManager {
                 );
 
                 // Sun direction (VEC3)
+                let sun_direction_primitive = rl_to_primitive_vec3(sun_direction);
                 ffi::SetShaderValue(
                     shader.as_ref().clone(),
                     self.sun_direction_loc,
-                    sun_direction.as_ptr() as *const _,
+                    sun_direction_primitive.as_ptr() as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC3 as i32,
                 );
 
@@ -154,7 +155,7 @@ impl ShaderManager {
         println!("  Fragment: {}", fs_path);
 
         let shader = rl.load_shader(thread, Some(&vs_path), Some(&fs_path));
-        println!("Fog shader loaded (otherwise the underlying FFI would've crashed...)");
+        println!("Terrain shader loaded (otherwise the underlying FFI would've crashed...)");
 
         Some(shader)
     }

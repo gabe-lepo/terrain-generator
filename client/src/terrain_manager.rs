@@ -130,7 +130,7 @@ impl TerrainManager {
         fog_near: f32,
         fog_far: f32,
         fog_color: Color,
-        sun_direction: [f32; 3],
+        sun_direction: Vector3,
         sun_color: Color,
         sun_intensity: f32,
         ambient_strength: f32,

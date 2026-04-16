@@ -4,24 +4,32 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
-    PositionUpdate { position: Vec3 },
+    PositionUpdate { position: NetworkVec3 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ServerMessage {
-    PositionUpdate { player_id: Uuid, position: Vec3 },
-    PlayerDisconnected { player_id: Uuid },
+    PositionUpdate {
+        player_id: Uuid,
+        position: NetworkVec3,
+    },
+    PlayerDisconnected {
+        player_id: Uuid,
+    },
+    TimeSync {
+        hour: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Vec3 {
+pub struct NetworkVec3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
-impl Vec3 {
+impl NetworkVec3 {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
@@ -33,13 +41,13 @@ impl Vec3 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
-    pub position: Vec3,
+    pub position: NetworkVec3,
 }
 
 impl Player {
     pub fn new() -> Self {
         Self {
-            position: Vec3::zero(),
+            position: NetworkVec3::zero(),
         }
     }
 }

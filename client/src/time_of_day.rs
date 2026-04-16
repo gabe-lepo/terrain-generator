@@ -3,7 +3,7 @@ use crate::config::{
     SKY_DAY_START, SKY_SUNRISE_MID, SKY_SUNSET_MID, SUNRISE_END, SUNRISE_START, SUNSET_END,
     SUNSET_START,
 };
-use raylib::prelude::Color;
+use raylib::prelude::*;
 
 const HOURS_IN_DAY: f32 = 24.0;
 const SECONDS_IN_HOUR: f32 = 3600.0;
@@ -42,10 +42,10 @@ impl TimeOfDay {
         self.hour = (self.hour + dt * speed / SECONDS_IN_HOUR).rem_euclid(HOURS_IN_DAY);
     }
 
-    pub fn sun_direction(&self) -> [f32; 3] {
+    pub fn sun_direction(&self) -> Vector3 {
         // No direction if between night/morning hours
         if self.hour < SUNRISE_START || self.hour > SUNSET_END {
-            return [0.0, -1.0, 0.0];
+            return Vector3::new(0.0, -1.0, 0.0);
         }
 
         let angle = (self.hour - 6.0) / (HOURS_IN_DAY / 2.0) * std::f32::consts::PI;
@@ -56,7 +56,7 @@ impl TimeOfDay {
 
         let len = (x * x + y * y + z * z).sqrt();
 
-        [x / len, y / len, z / len]
+        Vector3::new(x / len, y / len, z / len)
     }
 
     pub fn sun_intensity(&self) -> f32 {

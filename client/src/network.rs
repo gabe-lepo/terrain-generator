@@ -1,6 +1,6 @@
 use crate::config::{CONNECT, POSITION_ROUND_DECIMALS, POSITION_UPDATE_RATE_HZ};
 
-use shared::{ClientMessage, ServerMessage, Vec3};
+use shared::{ClientMessage, NetworkVec3, ServerMessage};
 use std::net::Ipv4Addr;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -29,8 +29,16 @@ impl Default for ServerConfig {
 pub enum NetworkEvent {
     Connected,
     Disconnected,
-    PlayerPositionUpdate { player_id: Uuid, position: Vec3 },
-    PlayerDisconnected { player_id: Uuid },
+    PlayerPositionUpdate {
+        player_id: Uuid,
+        position: NetworkVec3,
+    },
+    PlayerDisconnected {
+        player_id: Uuid,
+    },
+    TimeSync {
+        hour: f32,
+    },
 }
 
 /// Handle for sending commands to network task
@@ -40,7 +48,7 @@ pub struct NetworkHandle {
 
 impl NetworkHandle {
     /// Send a position update to the server
-    pub fn send_position_update(&self, position: Vec3) {
+    pub fn send_position_update(&self, position: NetworkVec3) {
         let msg = ClientMessage::PositionUpdate { position };
         // Ignore send errors for now (network task may be dead)
         // TODO: Handle errors
@@ -144,6 +152,10 @@ async fn handle_connection(
                                 // TODO: Handle the Result from send properly
                                 let _ = event_tx.send(NetworkEvent::PlayerDisconnected {player_id});
                             }
+                            Ok(ServerMessage::TimeSync {hour}) => {
+                                // TODO: Handle the Result from send properly
+                                let _ = event_tx.send(NetworkEvent::TimeSync {hour});
+                            }
                             Err(e) => {
                                 println!("Failed to parse server message: {e}");
                             }
@@ -180,9 +192,9 @@ pub fn should_send_position_update(last_update_time: &mut f32, dt: f32) -> bool 
 }
 
 /// Round posiiton coordinates
-pub fn round_position(position: Vec3) -> Vec3 {
+pub fn round_position(position: NetworkVec3) -> NetworkVec3 {
     let multiplier = 10_f32.powi(POSITION_ROUND_DECIMALS as i32);
-    Vec3::new(
+    NetworkVec3::new(
         (position.x * multiplier).round() / multiplier,
         (position.y * multiplier).round() / multiplier,
         (position.z * multiplier).round() / multiplier,
