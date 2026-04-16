@@ -3,7 +3,7 @@
 //! All gameplay and rendering constants in one place for easy tweaking.
 //! Just change values here and recompile - no need to hunt through modules.
 
-use raylib::{ffi::Vector3, prelude::Color};
+use raylib::prelude::Color;
 
 // ============================================================================
 // LIGHTING & TIME OF DAY

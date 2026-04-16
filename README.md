@@ -23,7 +23,7 @@ in Rust.
   - server says update avail or not,
   - client downloads + installs
 - Objects! I.e. something to do in the game...
-- Fix obvious visual lines between biomes (color and height)
+- Fix obvious height differences between biome boundaries
 - Improve generation (erosion? DLA?)
 - Reduce RAM usage with higher view distances
 - Move configs to shared, in case we need more complex server configs

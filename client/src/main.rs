@@ -24,11 +24,9 @@ use shaders::ShaderManager;
 use std::collections::HashMap;
 use sysinfo::System;
 use terrain_manager::TerrainManager;
-use time_of_day::*;
-use utils::*;
 use uuid::Uuid;
 
-use crate::config::{AMBIENT_STRENGTH, FOG_COLOR, SUN_DIRECTION};
+use crate::config::{AMBIENT_STRENGTH, FOG_COLOR, RENDER_WIREFRAME, SUN_DIRECTION};
 
 const BACKGROUND_COLOR: Color = Color::DEEPSKYBLUE;
 
@@ -151,7 +149,11 @@ fn main() {
             // Temporary static sun ball thing
             let sun_pos = player.position
                 + Vector3::new(SUN_DIRECTION[0], SUN_DIRECTION[1], SUN_DIRECTION[2]) * 500.0;
-            draw3d_handle.draw_sphere(sun_pos, 100.0, Color::LIGHTGOLDENRODYELLOW);
+            if RENDER_WIREFRAME {
+                draw3d_handle.draw_sphere_wires(sun_pos, 100.0, 10, 10, Color::BLACK);
+            } else {
+                draw3d_handle.draw_sphere(sun_pos, 100.0, Color::LIGHTGOLDENRODYELLOW);
+            }
 
             // Render remote players
             for remote_player in remote_players.values() {

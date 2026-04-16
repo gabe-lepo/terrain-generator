@@ -108,7 +108,7 @@ fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, biome_system: &BiomeSy
     let bounding_box = calculate_bounding_box(coord, &heightmap);
 
     // Normals
-    let normals = compute_normals(&heightmap);
+    let normals = compute_normals(&heightmap, coord, noise, biome_system);
 
     ChunkData {
         coord,
@@ -271,26 +271,40 @@ fn calculate_bounding_box(coord: (i32, i32), heightmap: &Vec<Vec<f32>>) -> Bound
     )
 }
 
-fn compute_normals(heightmap: &[Vec<f32>]) -> Vec<[f32; 3]> {
+fn compute_normals(
+    heightmap: &[Vec<f32>],
+    coord: (i32, i32),
+    noise: &Perlin,
+    biome_system: &BiomeSystem,
+) -> Vec<[f32; 3]> {
     let grid_size = heightmap.len();
     let mut normals = Vec::with_capacity(grid_size * grid_size);
     let last = grid_size - 1;
 
+    let chunk_world_x = coord.0 as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
+    let chunk_world_z = coord.1 as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
+
     for z in 0..grid_size {
         for x in 0..grid_size {
-            // Pick two adjacent X indices: forward if possible, backwards at right edge of chunk
-            let (x_a, x_b) = if x < last {
-                (x, x + 1) // Forward diff
+            let h_right = if x < last {
+                heightmap[z][x + 1]
             } else {
-                (x - 1, x) // Backwards diff at last column
+                let wx = chunk_world_x + (x + 1) as f32 * TERRAIN_RESOLUTION;
+                let wz = chunk_world_z + z as f32 * TERRAIN_RESOLUTION;
+                get_height(wx, wz, noise, biome_system)
             };
 
-            // Same thing for Z
-            let (z_a, z_b) = if z < last { (z, z + 1) } else { (z - 1, z) };
+            let h_down = if z < last {
+                heightmap[z + 1][x]
+            } else {
+                let wx = chunk_world_x + x as f32 * TERRAIN_RESOLUTION;
+                let wz = chunk_world_z + (z + 1) as f32 * TERRAIN_RESOLUTION;
+                get_height(wx, wz, noise, biome_system)
+            };
 
-            let nx = heightmap[z][x_a] - heightmap[z][x_b];
+            let nx = heightmap[z][x] - h_right;
             let ny = TERRAIN_RESOLUTION;
-            let nz = heightmap[z_a][x] - heightmap[z_b][x];
+            let nz = heightmap[z][x] - h_down;
 
             let len = (nx * nx + ny * ny + nz * nz).sqrt();
             normals.push([nx / len, ny / len, nz / len]);
