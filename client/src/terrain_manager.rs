@@ -63,7 +63,7 @@ impl TerrainManager {
         player_pos: Vector3,
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
-        fog_shader: Option<&Shader>,
+        terrain_shader: Option<&Shader>,
     ) {
         if !self.ready {
             return;
@@ -88,7 +88,11 @@ impl TerrainManager {
         while uploaded_this_frame < upload_cap {
             if let Some(chunk_data) = self.chunk_loader.poll_completed() {
                 let coord = ChunkCoord::new(chunk_data.coord.0, chunk_data.coord.1);
-                let shader = if RENDER_WIREFRAME { None } else { fog_shader };
+                let shader = if RENDER_WIREFRAME {
+                    None
+                } else {
+                    terrain_shader
+                };
                 let chunk = Chunk::from_data(chunk_data, rl, thread, shader);
                 self.chunks.insert(coord, chunk);
                 self.pending_chunks.remove(&coord);

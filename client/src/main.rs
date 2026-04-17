@@ -13,13 +13,7 @@ mod time_of_day;
 mod utils;
 mod world;
 
-use config::{
-    CONNECT, FAR_CLIP_PLANE_DISTANCE, RENDER_WIREFRAME, SUNRISE_START, SUNSET_END,
-    TIME_SPEED_10_MIN, TIME_SPEED_DEBUG, TIME_STARTING_HOUR, WINDOW_HEIGHT, WINDOW_WIDTH,
-};
-use network::{
-    NetworkEvent, ServerConfig, round_position, should_send_position_update, spawn_network_task,
-};
+use network::*;
 use player::Player;
 use raylib::prelude::*;
 use remote_player::RemotePlayer;
@@ -29,6 +23,11 @@ use sysinfo::System;
 use terrain_manager::TerrainManager;
 use time_of_day::TimeOfDay;
 use uuid::Uuid;
+
+use config::{
+    CONNECT, FAR_CLIP_PLANE_DISTANCE, RENDER_WIREFRAME, SUNRISE_START, SUNSET_END,
+    TIME_SPEED_20_MIN, TIME_SPEED_DEBUG, TIME_STARTING_HOUR, WINDOW_HEIGHT, WINDOW_WIDTH,
+};
 
 fn main() {
     // Network setup
@@ -51,7 +50,8 @@ fn main() {
     rl_handle.disable_cursor();
     rl_handle.set_exit_key(None);
 
-    // WARN: Experimental camera far plane clip modification
+    // WARN: Raylib wrapper does not provide a wrapper to modify clip plane
+    // (all calls to raylib-rs are "unsafe" as Raylib is in C)
     unsafe {
         raylib::ffi::rlSetClipPlanes(0.01, FAR_CLIP_PLANE_DISTANCE as f64);
     }
@@ -117,13 +117,13 @@ fn main() {
         };
 
         // Update chunks based on player pos (pass fog shader so new chunks get it applied)
-        let fog_shader = shader_manager.get_terrain_shader();
-        terrain_manager.update(player.position, &mut rl_handle, &rl_thread, fog_shader);
+        let terrain_shader = shader_manager.get_terrain_shader();
+        terrain_manager.update(player.position, &mut rl_handle, &rl_thread, terrain_shader);
 
         let dt = rl_handle.get_frame_time();
 
         // Advance time
-        time_of_day.advance(dt, TIME_SPEED_10_MIN);
+        time_of_day.advance(dt, TIME_SPEED_DEBUG);
 
         // Send position to server at configured rate
         if should_send_position_update(&mut last_position_update, dt) {

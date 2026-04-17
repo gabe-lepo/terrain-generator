@@ -1,7 +1,6 @@
 use crate::config::{
-    AMBIENT_DAY, AMBIENT_NIGHT, SKY_COLOR_DAY, SKY_COLOR_NIGHT, SKY_COLOR_SUNRISE, SKY_DAY_END,
-    SKY_DAY_START, SKY_SUNRISE_MID, SKY_SUNSET_MID, SUNRISE_END, SUNRISE_START, SUNSET_END,
-    SUNSET_START,
+    AMBIENT_DAY, AMBIENT_NIGHT, SKY_COLOR_DAY, SKY_COLOR_NIGHT, SKY_COLOR_SUNRISE, SUNRISE_END,
+    SUNRISE_START, SUNSET_END, SUNSET_START,
 };
 use raylib::prelude::*;
 
@@ -44,11 +43,12 @@ impl TimeOfDay {
 
     pub fn sun_direction(&self) -> Vector3 {
         // No direction if between night/morning hours
-        if self.hour < SUNRISE_START || self.hour > SUNSET_END {
-            return Vector3::new(0.0, -1.0, 0.0);
-        }
+        // if self.hour < SUNRISE_START || self.hour > SUNSET_END {
+        //     return Vector3::new(0.0, -1.0, 0.0);
+        // }
 
-        let angle = (self.hour - 6.0) / (HOURS_IN_DAY / 2.0) * std::f32::consts::PI;
+        let day_duration = SUNSET_END - SUNRISE_START;
+        let angle = (self.hour - SUNRISE_START) / day_duration * std::f32::consts::PI;
 
         let x = angle.cos();
         let y = angle.sin();
@@ -77,23 +77,25 @@ impl TimeOfDay {
     }
 
     pub fn sky_color(&self) -> Color {
+        let sunrise_mid = (SUNRISE_START + SUNRISE_END) / 2.0;
+        let sunset_mid = (SUNSET_START + SUNSET_END) / 2.0;
         let t: f32;
 
         if self.hour < SUNRISE_START || self.hour > SUNSET_END {
             SKY_COLOR_NIGHT
-        } else if self.hour < SKY_SUNRISE_MID {
-            t = (self.hour - SUNRISE_START) / (SKY_SUNRISE_MID - SUNRISE_START);
+        } else if self.hour < sunrise_mid {
+            t = (self.hour - SUNRISE_START) / (sunrise_mid - SUNRISE_START);
             SKY_COLOR_NIGHT.lerp(SKY_COLOR_SUNRISE, t)
-        } else if self.hour < SKY_DAY_START {
-            t = (self.hour - SKY_SUNRISE_MID) / (SKY_DAY_START - SKY_SUNRISE_MID);
+        } else if self.hour < SUNRISE_END {
+            t = (self.hour - sunrise_mid) / (SUNRISE_END - sunrise_mid);
             SKY_COLOR_SUNRISE.lerp(SKY_COLOR_DAY, t)
-        } else if self.hour < SKY_DAY_END {
+        } else if self.hour < SUNSET_START {
             SKY_COLOR_DAY
-        } else if self.hour < SKY_SUNSET_MID {
-            t = (self.hour - SKY_DAY_END) / (SKY_SUNSET_MID - SKY_DAY_END);
+        } else if self.hour < sunset_mid {
+            t = (self.hour - SUNSET_START) / (sunset_mid - SUNSET_START);
             SKY_COLOR_DAY.lerp(SKY_COLOR_SUNRISE, t)
         } else {
-            t = (self.hour - SKY_SUNSET_MID) / (SUNSET_END - SKY_SUNSET_MID);
+            t = (self.hour - sunset_mid) / (SUNSET_END - sunset_mid);
             SKY_COLOR_SUNRISE.lerp(SKY_COLOR_NIGHT, t)
         }
     }

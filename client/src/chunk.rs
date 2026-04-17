@@ -47,7 +47,7 @@ impl Chunk {
         data: ChunkData,
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
-        fog_shader: Option<&Shader>,
+        terrain_shader: Option<&Shader>,
     ) -> Self {
         let coord = ChunkCoord::new(data.coord.0, data.coord.1);
         let vertices = data.vertices;
@@ -121,7 +121,7 @@ impl Chunk {
             .expect("Failed to create model from mesh");
 
         // Set fog shader on the model's material if provided
-        if let Some(shader) = fog_shader {
+        if let Some(shader) = terrain_shader {
             let materials = model.materials_mut();
             if let Some(material) = materials.get_mut(0) {
                 material.as_mut().shader = shader.as_ref().clone();

@@ -9,25 +9,18 @@ use raylib::prelude::Color;
 // LIGHTING & TIME OF DAY
 // ============================================================================
 
-pub const TIME_STARTING_HOUR: f32 = 6.0;
-pub const TIME_SPEED_10_MIN: f32 = 600.0;
+pub const TIME_STARTING_HOUR: f32 = 4.0;
+pub const TIME_SPEED_20_MIN: f32 = 300.0;
 pub const TIME_SPEED_DEBUG: f32 = 6000.0;
 
 pub const AMBIENT_DAY: f32 = 0.35;
 pub const AMBIENT_NIGHT: f32 = 0.08;
 
 /// Hour thresholds for sun/sky transitions
-pub const SUNRISE_START: f32 = 4.5;
-pub const SUNRISE_END: f32 = 7.5;
-pub const SUNSET_START: f32 = 16.5;
-pub const SUNSET_END: f32 = 19.5;
-
-/// Hour thresholds for sky color transitions
-/// (sky blends: night -> sunrise color -> day color | day color -> sunset color -> night)
-pub const SKY_SUNRISE_MID: f32 = 6.0;
-pub const SKY_DAY_START: f32 = 8.5;
-pub const SKY_DAY_END: f32 = 15.5;
-pub const SKY_SUNSET_MID: f32 = 18.0;
+pub const SUNRISE_START: f32 = 5.0;
+pub const SUNRISE_END: f32 = 7.0;
+pub const SUNSET_START: f32 = 19.0;
+pub const SUNSET_END: f32 = 21.0;
 
 /// Sky colors at each phase
 pub const SKY_COLOR_NIGHT: Color = Color::new(3, 3, 8, 255);
