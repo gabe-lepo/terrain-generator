@@ -17,7 +17,8 @@ pub enum ServerMessage {
     PlayerDisconnected {
         player_id: Uuid,
     },
-    TimeSync {
+    WorldSync {
+        seed: u64,
         hour: f32,
     },
 }

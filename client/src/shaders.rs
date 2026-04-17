@@ -120,7 +120,7 @@ impl ShaderManager {
                 );
 
                 // Sun intensity (FLOAT)
-                let sun_color_norm = color_to_f32(sun_color);
+                // let sun_color_norm = color_to_f32(sun_color);
                 ffi::SetShaderValue(
                     shader.as_ref().clone(),
                     self.sun_intensity_loc,

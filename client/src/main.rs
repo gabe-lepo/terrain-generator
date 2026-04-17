@@ -1,10 +1,10 @@
 // WARN: Comment this after building out everything
 #![allow(dead_code, unused)]
-mod biome;
 mod chunk;
 mod chunk_loader;
 mod config;
 mod network;
+mod planet;
 mod player;
 mod remote_player;
 mod shaders;
@@ -13,7 +13,10 @@ mod time_of_day;
 mod utils;
 mod world;
 
-use config::{FAR_CLIP_PLANE_DISTANCE, SUN_COLOR, WINDOW_HEIGHT, WINDOW_WIDTH};
+use config::{
+    CONNECT, FAR_CLIP_PLANE_DISTANCE, RENDER_WIREFRAME, SUNRISE_START, SUNSET_END,
+    TIME_SPEED_10_MIN, TIME_SPEED_DEBUG, TIME_STARTING_HOUR, WINDOW_HEIGHT, WINDOW_WIDTH,
+};
 use network::{
     NetworkEvent, ServerConfig, round_position, should_send_position_update, spawn_network_task,
 };
@@ -26,13 +29,6 @@ use sysinfo::System;
 use terrain_manager::TerrainManager;
 use time_of_day::TimeOfDay;
 use uuid::Uuid;
-
-use crate::config::{
-    AMBIENT_STRENGTH, FOG_COLOR, RENDER_WIREFRAME, SUN_DIRECTION, SUNRISE_START, SUNSET_END,
-    TIME_SPEED_10_MIN, TIME_SPEED_DEBUG, TIME_STARTING_HOUR,
-};
-
-const BACKGROUND_COLOR: Color = Color::DEEPSKYBLUE;
 
 fn main() {
     // Network setup
@@ -60,9 +56,8 @@ fn main() {
         raylib::ffi::rlSetClipPlanes(0.01, FAR_CLIP_PLANE_DISTANCE as f64);
     }
 
-    // Player and terrain setup
+    // Player setup
     let mut player = Player::new(Vector3::new(-705.0, 50.0, 227.0));
-    let mut terrain_manager = TerrainManager::new();
 
     // Shader setup
     let mut shader_manager = ShaderManager::new();
@@ -74,25 +69,14 @@ fn main() {
     // Time of day setup
     let mut time_of_day = TimeOfDay::new(TIME_STARTING_HOUR);
 
+    // Terrain manager setup
+    let mut terrain_manager = TerrainManager::new(0);
+    if !CONNECT {
+        terrain_manager.reinit_with_seed(12345);
+    }
+
     // Main loop
     while !rl_handle.window_should_close() {
-        // Process memory usage
-        sys.refresh_all();
-        let used_mb = if let Some(process) = sys.process(current_pid) {
-            process.memory() as f32 / 1024.0 / 1024.0
-        } else {
-            0.0
-        };
-
-        // Update chunks based on player pos (pass fog shader so new chunks get it applied)
-        let fog_shader = shader_manager.get_terrain_shader();
-        terrain_manager.update(player.position, &mut rl_handle, &rl_thread, fog_shader);
-
-        let dt = rl_handle.get_frame_time();
-
-        // Advance time
-        time_of_day.advance(dt, TIME_SPEED_DEBUG);
-
         // Process network events
         while let Ok(event) = network_events.try_recv() {
             match event {
@@ -116,12 +100,30 @@ fn main() {
                     remote_players.remove(&player_id);
                     println!("Player {} disconnected", player_id);
                 }
-                NetworkEvent::TimeSync { hour } => {
+                NetworkEvent::WorldSync { seed, hour } => {
                     time_of_day.set_hour(hour);
-                    println!("Time synced: {:.2}", hour);
+                    terrain_manager.reinit_with_seed(seed);
+                    println!("World synced: Seed: {} | Hour: {:.2}", seed, hour);
                 }
             }
         }
+
+        // Process memory usage
+        sys.refresh_all();
+        let used_mb = if let Some(process) = sys.process(current_pid) {
+            process.memory() as f32 / 1024.0 / 1024.0
+        } else {
+            0.0
+        };
+
+        // Update chunks based on player pos (pass fog shader so new chunks get it applied)
+        let fog_shader = shader_manager.get_terrain_shader();
+        terrain_manager.update(player.position, &mut rl_handle, &rl_thread, fog_shader);
+
+        let dt = rl_handle.get_frame_time();
+
+        // Advance time
+        time_of_day.advance(dt, TIME_SPEED_10_MIN);
 
         // Send position to server at configured rate
         if should_send_position_update(&mut last_position_update, dt) {
@@ -236,11 +238,20 @@ fn draw_stats(
         text_color,
     );
 
-    // Biome names
+    // Planet type
     d.draw_text(
-        &terrain_manager.get_biome_name_at(player.position.x, player.position.z),
+        terrain_manager.planet.get_planet_name(),
         10,
         90,
+        20,
+        text_color,
+    );
+
+    // Seed
+    d.draw_text(
+        &format!("Seed: {}", terrain_manager.planet.seed.to_string()),
+        10,
+        110,
         20,
         text_color,
     );
@@ -249,7 +260,7 @@ fn draw_stats(
     d.draw_text(
         &format!("Time: {:.2}", time_of_day.hour()),
         10,
-        110,
+        130,
         20,
         text_color,
     );

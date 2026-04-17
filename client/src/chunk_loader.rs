@@ -1,8 +1,6 @@
-use crate::biome::BiomeSystem;
-use crate::config::{
-    CHUNK_LOADER_THREAD_POOLS, CHUNK_SIZE, GOD_MODE, LACUNARITY, NOISE_FREQ, SEED,
-    TERRAIN_RESOLUTION,
-};
+use crate::config::{CHUNK_LOADER_THREAD_POOLS, CHUNK_SIZE, GOD_MODE, TERRAIN_RESOLUTION};
+use crate::planet::{HeightBand, PlanetConfig};
+
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
 use std::sync::Arc;
@@ -32,7 +30,7 @@ pub struct ChunkLoader {
 
 impl ChunkLoader {
     /// Create new chunk loader with dedicated runtime
-    pub fn new(noise: Perlin, biome_system: Arc<BiomeSystem>) -> Self {
+    pub fn new(noise: Perlin, planet: Arc<PlanetConfig>) -> Self {
         let (request_tx, request_rx) = mpsc::unbounded_channel::<ChunkRequest>();
         let (completed_tx, completed_rx) = mpsc::unbounded_channel::<ChunkData>();
 
@@ -48,7 +46,7 @@ impl ChunkLoader {
                 .expect("Failed to create chunk loader runtime");
 
             rt.block_on(async move {
-                chunk_loader_task(request_rx, completed_tx, noise, biome_system).await;
+                chunk_loader_task(request_rx, completed_tx, noise, planet).await;
             });
         });
 
@@ -69,6 +67,62 @@ impl ChunkLoader {
     pub fn poll_completed(&mut self) -> Option<ChunkData> {
         self.completed_rx.try_recv().ok()
     }
+
+    /// NOTE: This is the main terrain "shaping" function
+    /// TODO: Caves? How to have multiple y values per x,z
+    pub fn get_height(x: f32, z: f32, noise: &Perlin, planet: &PlanetConfig) -> f32 {
+        let seed_offset = (planet.seed.wrapping_mul(2654435761) % 100_000) as f64;
+        let continent_offset = (planet.seed.wrapping_mul(1234567891) % 100_000) as f64;
+
+        // Continental masking
+        let cx = x as f64 * planet.continent_freq + continent_offset;
+        let cz = z as f64 * planet.continent_freq + continent_offset;
+        let continent = noise.get([cx, cz]);
+        if continent < planet.water_threshold {
+            let depth = (continent - planet.water_threshold) * 50.0;
+            return (planet.base_height as f64 + depth) as f32;
+        }
+
+        // NOTE: This doesnt work well... makes landmasses less-unique
+        // Domain warping
+        // let warp_freq = planet.freq_scale * 2.0;
+        // let warp_x = noise.get([
+        //     x as f64 * warp_freq + seed_offset + 1.7,
+        //     z as f64 * warp_freq + seed_offset + 9.2,
+        // ]);
+        // let warp_z = noise.get([
+        //     x as f64 * warp_freq + seed_offset + 8.3,
+        //     z as f64 * warp_freq + seed_offset + 2.8,
+        // ]);
+
+        // Noise detail loop
+        let mut total = 0.0_f64;
+        let mut amplitude = 1.0_f64;
+        let mut frequency = planet.freq_scale;
+        let mut max_value = 0.0_f64;
+
+        for _ in 0..planet.octaves {
+            let nx = (x as f64) * frequency + seed_offset;
+            let nz = (z as f64) * frequency + seed_offset;
+            // let nx = (x as f64 + warp_x * planet.warp_strength) * frequency + seed_offset;
+            // let nz = (z as f64 + warp_z * planet.warp_strength) * frequency + seed_offset;
+            total += noise.get([nx, nz]) * amplitude;
+            max_value += amplitude;
+            amplitude *= planet.persistence as f64;
+            frequency *= planet.lacunarity;
+        }
+
+        let normalized = total / max_value;
+        // Scale land height by how far above water thresh we are
+        let continent_factor = ((continent - planet.water_threshold)
+            / (1.0 - planet.water_threshold))
+            .clamp(0.0, 1.0)
+            .powf(planet.continent_slope);
+        let land_height =
+            ((normalized + 1.0) / 2.0) * planet.height_scale as f64 * continent_factor;
+
+        (planet.base_height as f64 + land_height) as f32
+    }
 }
 
 /// Main chunk loader task
@@ -76,39 +130,48 @@ async fn chunk_loader_task(
     mut request_rx: mpsc::UnboundedReceiver<ChunkRequest>,
     completed_tx: mpsc::UnboundedSender<ChunkData>,
     noise: Arc<Perlin>,
-    biome_system: Arc<BiomeSystem>,
+    planet: Arc<PlanetConfig>,
 ) {
     while let Some(request) = request_rx.recv().await {
         let noise = Arc::clone(&noise);
-        let biome_system = Arc::clone(&biome_system);
+        let planet = Arc::clone(&planet);
         let completed_tx = completed_tx.clone();
 
         // Spawn task to generate the chunk
         tokio::spawn(async move {
-            // TODO: Generate heightmap, vertices, indices, colors, bbox
-            // This is where we move the chunk gen logic
-
-            let chunk_data = generate_chunk_data(request.coord, &noise, &biome_system);
-            if let Err(err) = completed_tx.send(chunk_data) {
-                println!("Error sending completed chunk data! {:?}", err);
+            let result =
+                std::panic::catch_unwind(|| generate_chunk_data(request.coord, &noise, &planet));
+            match result {
+                Ok(chunk_data) => {
+                    if let Err(err) = completed_tx.send(chunk_data) {
+                        println!("Error sending completed chunk data: {:?}", err);
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Chunk generation panicked for coord: {:?}\n\t{:?}",
+                        request.coord, e
+                    );
+                    std::process::abort();
+                }
             }
         });
     }
 }
 
 /// Generate all chunk data, cpu only work here
-fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, biome_system: &BiomeSystem) -> ChunkData {
+fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, planet: &PlanetConfig) -> ChunkData {
     // ALWAYS generate heightmap, only return it if not god mode
-    let heightmap = generate_heightmap(coord, noise, biome_system);
+    let heightmap = generate_heightmap(coord, noise, planet);
 
     // Build mesh data
-    let (vertices, indices, colors) = build_mesh_data(coord, &heightmap, biome_system);
+    let (vertices, indices, colors) = build_mesh_data(&heightmap, planet);
 
     // Calc bounding box
     let bounding_box = calculate_bounding_box(coord, &heightmap);
 
     // Normals
-    let normals = compute_normals(&heightmap, coord, noise, biome_system);
+    let normals = compute_normals(&heightmap, coord, noise, planet);
 
     ChunkData {
         coord,
@@ -121,11 +184,7 @@ fn generate_chunk_data(coord: (i32, i32), noise: &Perlin, biome_system: &BiomeSy
     }
 }
 
-fn generate_heightmap(
-    coord: (i32, i32),
-    noise: &Perlin,
-    biome_system: &BiomeSystem,
-) -> Vec<Vec<f32>> {
+fn generate_heightmap(coord: (i32, i32), noise: &Perlin, planet: &PlanetConfig) -> Vec<Vec<f32>> {
     let grid_size = CHUNK_SIZE as usize + 1;
     let mut heightmap = Vec::with_capacity(grid_size);
 
@@ -138,7 +197,7 @@ fn generate_heightmap(
         for x in 0..grid_size {
             let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
             let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
-            let height = get_height(world_x, world_z, noise, biome_system);
+            let height = ChunkLoader::get_height(world_x, world_z, noise, planet);
             row.push(height);
         }
         heightmap.push(row);
@@ -147,38 +206,9 @@ fn generate_heightmap(
     heightmap
 }
 
-fn get_height(x: f32, z: f32, noise: &Perlin, biome_system: &BiomeSystem) -> f32 {
-    let seed_offset = SEED as f64 * 1000.0;
-    let biome = biome_system.get_biome_at(x, z);
-
-    let mut total = 0.0;
-    let mut amplitude = 1.0;
-    let mut frequency = NOISE_FREQ as f64;
-    let mut max_value = 0.0;
-
-    for _ in 0..biome.octaves {
-        let nx = (x as f64) * frequency + seed_offset;
-        let nz = (z as f64) * frequency + seed_offset;
-        let noise_val = noise.get([nx, nz]);
-
-        total += noise_val * amplitude;
-        max_value += amplitude;
-
-        amplitude *= biome.persistence as f64;
-        frequency *= LACUNARITY;
-    }
-
-    let normalized = total / max_value;
-    let height =
-        biome.base_height as f64 + ((normalized + 1.0) / 2.0) * (biome.height_scale as f64);
-
-    height as f32
-}
-
 fn build_mesh_data(
-    coord: (i32, i32),
     heightmap: &Vec<Vec<f32>>,
-    biome_system: &BiomeSystem,
+    planet: &PlanetConfig,
 ) -> (Vec<Vector3>, Vec<u16>, Vec<Color>) {
     let grid_size = heightmap.len();
     let vertex_count = grid_size * grid_size;
@@ -217,32 +247,10 @@ fn build_mesh_data(
         }
     }
 
-    // Generate vertex colors based on biome
-    let chunk_world_x = coord.0 as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
-    let chunk_world_z = coord.1 as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
-
     for z in 0..grid_size {
         for x in 0..grid_size {
             let height = heightmap[z][x];
-            let world_x = chunk_world_x + (x as f32 * TERRAIN_RESOLUTION);
-            let world_z = chunk_world_z + (z as f32 * TERRAIN_RESOLUTION);
-
-            let biome = biome_system.get_biome_at(world_x, world_z);
-            let height_normalized =
-                ((height - biome.base_height) / biome.height_scale).clamp(0.0, 1.0);
-            let height_curved = height_normalized.powf(biome.color_transition_power);
-
-            let r = (biome.base_color.r as f32
-                + (biome.peak_color.r as f32 - biome.base_color.r as f32) * height_curved)
-                as u8;
-            let g = (biome.base_color.g as f32
-                + (biome.peak_color.g as f32 - biome.base_color.g as f32) * height_curved)
-                as u8;
-            let b = (biome.base_color.b as f32
-                + (biome.peak_color.b as f32 - biome.base_color.b as f32) * height_curved)
-                as u8;
-
-            colors.push(Color::new(r, g, b, 255));
+            colors.push(height_to_color(height, &planet.bands));
         }
     }
 
@@ -275,7 +283,7 @@ fn compute_normals(
     heightmap: &[Vec<f32>],
     coord: (i32, i32),
     noise: &Perlin,
-    biome_system: &BiomeSystem,
+    planet: &PlanetConfig,
 ) -> Vec<[f32; 3]> {
     let grid_size = heightmap.len();
     let mut normals = Vec::with_capacity(grid_size * grid_size);
@@ -291,7 +299,7 @@ fn compute_normals(
             } else {
                 let wx = chunk_world_x + (x + 1) as f32 * TERRAIN_RESOLUTION;
                 let wz = chunk_world_z + z as f32 * TERRAIN_RESOLUTION;
-                get_height(wx, wz, noise, biome_system)
+                ChunkLoader::get_height(wx, wz, noise, planet)
             };
 
             let h_down = if z < last {
@@ -299,7 +307,7 @@ fn compute_normals(
             } else {
                 let wx = chunk_world_x + x as f32 * TERRAIN_RESOLUTION;
                 let wz = chunk_world_z + (z + 1) as f32 * TERRAIN_RESOLUTION;
-                get_height(wx, wz, noise, biome_system)
+                ChunkLoader::get_height(wx, wz, noise, planet)
             };
 
             let nx = heightmap[z][x] - h_right;
@@ -312,4 +320,26 @@ fn compute_normals(
     }
 
     normals
+}
+
+fn height_to_color(height: f32, bands: &Vec<HeightBand>) -> Color {
+    // Find first band whose max_y is >= height
+    for i in 0..bands.len() {
+        if height <= bands[i].max_y {
+            // First band has no blending
+            if i == 0 {
+                return bands[0].color;
+            }
+
+            // Blend between previous and current band
+            let prev = &bands[i - 1];
+            let curr = &bands[i];
+            let band_range = curr.max_y - prev.max_y;
+            let t = ((height - prev.max_y) / band_range).clamp(0.0, 1.0);
+            return prev.color.lerp(curr.color, t);
+        }
+    }
+
+    // Above all bands, return top color
+    bands.last().map(|b| b.color).unwrap_or(Color::WHITE)
 }

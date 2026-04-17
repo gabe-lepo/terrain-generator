@@ -1,10 +1,10 @@
-use crate::biome::BiomeSystem;
 use crate::chunk::{Chunk, ChunkCoord};
 use crate::chunk_loader::ChunkLoader;
 use crate::config::{
     CHUNK_SIZE, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT, MAX_DISTANCE_BUFFER,
-    RENDER_WIREFRAME, SEED, TERRAIN_RESOLUTION, VIEW_DISTANCE,
+    RENDER_WIREFRAME, VIEW_DISTANCE,
 };
+use crate::planet::PlanetConfig;
 use crate::shaders::ShaderManager;
 use crate::world::WorldQuery;
 
@@ -18,28 +18,43 @@ pub struct TerrainManager {
     noise: Perlin,
     last_player_chunk: Option<ChunkCoord>,
     last_rendered_count: usize,
-    biome_system: Arc<BiomeSystem>,
+    pub planet: Arc<PlanetConfig>,
     chunk_loader: ChunkLoader,
     pending_chunks: HashSet<ChunkCoord>,
+    ready: bool,
 }
 
 impl TerrainManager {
-    pub fn new() -> Self {
-        let noise = Perlin::new(SEED);
-
-        // Create chunk loaded with shared noise and biome sys
-        let biome_system = Arc::new(BiomeSystem::new(noise));
-        let chunk_loader = ChunkLoader::new(noise, Arc::clone(&biome_system));
+    pub fn new(seed: u64) -> Self {
+        let noise = Perlin::new(seed as u32);
+        let planet = Arc::new(PlanetConfig::get_planet_config(seed));
+        let chunk_loader = ChunkLoader::new(noise, Arc::clone(&planet));
 
         Self {
             chunks: HashMap::new(),
             noise,
             last_player_chunk: None,
             last_rendered_count: 0,
-            biome_system,
+            planet,
             chunk_loader,
             pending_chunks: HashSet::new(),
+            ready: false,
         }
+    }
+
+    /// Reinitialize world when we get seed from server
+    pub fn reinit_with_seed(&mut self, seed: u64) {
+        let noise = Perlin::new(seed as u32);
+        let planet = Arc::new(PlanetConfig::get_planet_config(seed));
+        let chunk_loader = ChunkLoader::new(noise, Arc::clone(&planet));
+
+        self.noise = noise;
+        self.planet = planet;
+        self.chunk_loader = chunk_loader;
+        self.chunks.clear();
+        self.pending_chunks.clear();
+        self.last_player_chunk = None;
+        self.ready = true;
     }
 
     /// Update which chunks are loaded based on player pos
@@ -50,6 +65,10 @@ impl TerrainManager {
         thread: &RaylibThread,
         fog_shader: Option<&Shader>,
     ) {
+        if !self.ready {
+            return;
+        }
+
         let current_chunk = ChunkCoord::from_world_pos(player_pos.x, player_pos.z);
 
         // PERF:
@@ -177,15 +196,9 @@ impl TerrainManager {
         (fog_near, fog_far)
     }
 
-    /// Get biome system biome name
-    pub fn get_biome_name_at(&self, x: f32, z: f32) -> String {
-        self.biome_system.get_biome_at(x, z).name
-    }
-
     // Private
     fn calculate_height_from_noise(&self, x: f32, z: f32) -> f32 {
-        use crate::chunk::get_height;
-        get_height(x, z, &self.noise, &self.biome_system)
+        ChunkLoader::get_height(x, z, &self.noise, &self.planet)
     }
 
     fn is_chunk_potentially_visible(camera: &Camera3D, chunk: &Chunk) -> bool {

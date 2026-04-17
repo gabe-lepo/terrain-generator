@@ -1,5 +1,5 @@
 // WARN: Comment this after building out everything
-// #![allow(dead_code, unused)]
+#![allow(dead_code, unused)]
 mod client;
 
 use client::Client;
@@ -35,6 +35,12 @@ async fn main() {
     // Start time of day state
     let server_start = Instant::now();
 
+    // Generate random seed
+    let world_seed: u64 = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Failed to set random seed")
+        .as_millis() as u64;
+
     // Main accept loop
     loop {
         // Accept connection
@@ -52,26 +58,36 @@ async fn main() {
         let client_id = client.id;
         registry_guard.push(client);
 
-        // Send time sync message to client
+        // Send world sync message to client
         // TODO:
         // - Create shared config for these consts
         // - Offload this message send to a helper
         // - current_hour is only calc'd on new connection. Maybe send it to a
         //   thread for persistent time tracking
+        // - Seed switcher system on planet escape
         const STARTING_HOUR: f32 = 6.0;
         const TIME_SPEED_10_MIN: f32 = 600.0;
         const TIME_SPEED_DEBUG: f32 = 6000.0;
         const HOURS_IN_DAY: f32 = 24.0;
         const SECONDS_IN_HOUR: f32 = 3600.0;
         let elapsed_hours =
-            server_start.elapsed().as_secs_f32() * TIME_SPEED_DEBUG / SECONDS_IN_HOUR;
+            server_start.elapsed().as_secs_f32() * TIME_SPEED_10_MIN / SECONDS_IN_HOUR;
         let current_hour = (STARTING_HOUR + elapsed_hours).rem_euclid(HOURS_IN_DAY);
-        let time_sync_msg = ServerMessage::TimeSync { hour: current_hour };
-        let serialized =
-            serde_json::to_string(&time_sync_msg).expect("time sync serialization failure") + "\n";
+        let world_sync_msg = ServerMessage::WorldSync {
+            seed: world_seed,
+            hour: current_hour,
+        };
+        let serialized = serde_json::to_string(&world_sync_msg)
+            .expect("world sync serialization failure")
+            + "\n";
         let _ = registry_guard.iter().find(|c| c.id == client_id).map(|c| {
             if let Err(e) = c.tx.try_send(serialized) {
-                println!("Failed to send time sync msg: {e}");
+                println!("Failed to send world sync msg: {e}");
+            } else {
+                println!(
+                    "Sent world sync message to client {}:\n\tTime: {:.2} | Seed: {}\n",
+                    client_id, current_hour, world_seed
+                );
             }
         });
 

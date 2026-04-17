@@ -36,7 +36,8 @@ pub enum NetworkEvent {
     PlayerDisconnected {
         player_id: Uuid,
     },
-    TimeSync {
+    WorldSync {
+        seed: u64,
         hour: f32,
     },
 }
@@ -146,15 +147,20 @@ async fn handle_connection(
                         match serde_json::from_str::<ServerMessage>(trimmed) {
                             Ok(ServerMessage::PositionUpdate {player_id, position}) => {
                                 // TODO: Handle the Result from send properly
-                                let _ = event_tx.send(NetworkEvent::PlayerPositionUpdate {player_id, position});
+                                if let Err(e) = event_tx.send(NetworkEvent::PlayerPositionUpdate {player_id, position}) {
+                                    println!("Failed player position update message: {e}");
+                                };
                             }
                             Ok(ServerMessage::PlayerDisconnected {player_id}) => {
                                 // TODO: Handle the Result from send properly
-                                let _ = event_tx.send(NetworkEvent::PlayerDisconnected {player_id});
+                                if let Err(e) = event_tx.send(NetworkEvent::PlayerDisconnected {player_id}) {
+                                    println!("Failed player disconnect message: {e}");
+                                };
                             }
-                            Ok(ServerMessage::TimeSync {hour}) => {
-                                // TODO: Handle the Result from send properly
-                                let _ = event_tx.send(NetworkEvent::TimeSync {hour});
+                            Ok(ServerMessage::WorldSync {seed, hour}) => {
+                                if let Err(e) = event_tx.send(NetworkEvent::WorldSync {hour, seed}) {
+                                    println!("Failed to sync world: {e}");
+                                };
                             }
                             Err(e) => {
                                 println!("Failed to parse server message: {e}");

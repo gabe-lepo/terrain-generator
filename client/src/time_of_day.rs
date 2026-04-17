@@ -77,7 +77,7 @@ impl TimeOfDay {
     }
 
     pub fn sky_color(&self) -> Color {
-        let mut t: f32;
+        let t: f32;
 
         if self.hour < SUNRISE_START || self.hour > SUNSET_END {
             SKY_COLOR_NIGHT

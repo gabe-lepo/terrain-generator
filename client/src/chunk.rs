@@ -1,10 +1,8 @@
-use crate::biome::BiomeSystem;
 use crate::chunk_loader::ChunkData;
-use crate::config::{CHUNK_SIZE, LACUNARITY, NOISE_FREQ, SEED, TERRAIN_RESOLUTION};
+use crate::config::{CHUNK_SIZE, TERRAIN_RESOLUTION};
 
 use std::f32;
 
-use noise::{NoiseFn, Perlin};
 use raylib::ffi;
 use raylib::prelude::*;
 
@@ -193,36 +191,4 @@ impl Chunk {
     }
 
     // Private
-}
-
-/// Fancy terrain gen
-pub fn get_height(x: f32, z: f32, noise: &Perlin, biome_system: &BiomeSystem) -> f32 {
-    let seed_offset = SEED as f64 * 1000.0;
-
-    // Sample biome as this position
-    let biome = biome_system.get_biome_at(x, z);
-
-    let mut total = 0.0;
-    let mut amplitude = 1.0;
-    let mut frequency = NOISE_FREQ;
-    let mut max_value = 0.0; // Normalization
-
-    for _ in 0..biome.octaves {
-        let nx = (x as f64) * frequency + seed_offset;
-        let nz = (z as f64) * frequency + seed_offset;
-        let noise_val = noise.get([nx, nz]);
-
-        total += noise_val * amplitude;
-        max_value += amplitude;
-
-        // Biome params
-        amplitude *= biome.persistence as f64;
-        frequency *= LACUNARITY;
-    }
-
-    let normalized = total / max_value;
-    let height =
-        biome.base_height as f64 + ((normalized + 1.0) / 2.0) * (biome.height_scale as f64);
-
-    height as f32
 }

@@ -5,14 +5,6 @@ in Rust.
 
 ## TODO
 
-### Server
-
-- Create IP whitelisting
-- Review the whole IP:PORT based UUID situation, client ports will change
-  frequently need another deterministic way to give unique but persistent
-  client ids
-- Expose server to internet
-
 ### Client
 
 - Menu system
@@ -22,9 +14,30 @@ in Rust.
   - client contacts server with version
   - server says update avail or not,
   - client downloads + installs
+  - github workflows?
+- Generation situation
+  - full planets (not infinite)
+  - Server has seed value, sends to new client connections
+  - planet must feel large but small enough to circumnavigate (follow the sun)
+  - Procedurally generated... objects? Clues? Leading to you the escape point
 - Objects! I.e. something to do in the game...
+  - Spaceman marooned on planet?
+  - must find way off planet
+  - when you find out how to escape, you are immediately marooned on the next planet
+  - Hostile planets 75% -> Nice relaxing planets 25%
+  - Melee only?
+
+### Server
+
+- Create IP whitelisting
+- Review the whole IP:PORT based UUID situation, client ports will change
+  frequently need another deterministic way to give unique but persistent
+  client ids
+- Expose server to internet
+
+### General bugs/tasks
+
 - Fix obvious height differences between biome boundaries
-- Improve generation (erosion? DLA?)
 - Reduce RAM usage with higher view distances
 - Move configs to shared, in case we need more complex server configs
 
