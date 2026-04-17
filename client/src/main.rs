@@ -116,14 +116,14 @@ fn main() {
             0.0
         };
 
-        // Update chunks based on player pos (pass fog shader so new chunks get it applied)
+        // Update chunks based on player pos
         let terrain_shader = shader_manager.get_terrain_shader();
         terrain_manager.update(player.position, &mut rl_handle, &rl_thread, terrain_shader);
 
         let dt = rl_handle.get_frame_time();
 
         // Advance time
-        time_of_day.advance(dt, TIME_SPEED_DEBUG);
+        time_of_day.advance(dt, TIME_SPEED_20_MIN);
 
         // Send position to server at configured rate
         if should_send_position_update(&mut last_position_update, dt) {
