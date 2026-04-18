@@ -174,7 +174,7 @@ fn main() {
             time_of_day.ambient_strength(),
         );
 
-        // 2d drawing setup before 3d
+        // 2d drawing setup
         let mut draw_handle = rl_handle.begin_drawing(&rl_thread);
         draw_handle.clear_background(time_of_day.sky_color());
 
@@ -190,12 +190,12 @@ fn main() {
                 sun_config,
             );
 
-            // Temporary static sun ball thing
-            let sun_pos = player.position + time_of_day.sun_direction() * 5000.0;
+            // NOTE: Likely should move this to the terrain manager
+            let sun_pos = player.position + time_of_day.sun_direction() * SUN_PLAYER_DISTANCE;
             if RENDER_WIREFRAME {
-                draw3d_handle.draw_sphere_wires(sun_pos, 1000.0, 10, 10, Color::BLACK);
+                draw3d_handle.draw_sphere_wires(sun_pos, SUN_RADIUS, 10, 10, Color::BLACK);
             } else {
-                draw3d_handle.draw_sphere(sun_pos, 1000.0, Color::LIGHTGOLDENRODYELLOW);
+                draw3d_handle.draw_sphere(sun_pos, SUN_RADIUS, Color::LIGHTGOLDENRODYELLOW);
             }
 
             // Render remote players

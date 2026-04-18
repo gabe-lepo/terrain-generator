@@ -41,21 +41,14 @@ impl TimeOfDay {
     }
 
     pub fn sun_direction(&self) -> Vector3 {
-        // No direction if between night/morning hours
-        // if self.hour < SUNRISE_START || self.hour > SUNSET_END {
-        //     return Vector3::new(0.0, -1.0, 0.0);
-        // }
-
         let day_duration = SUNSET_END - SUNRISE_START;
-        let angle = (self.hour - SUNRISE_START) / day_duration * std::f32::consts::PI;
 
-        let x = angle.cos();
-        let y = angle.sin();
-        let z = 0.3; // ?
+        // Extend arc by sun radius so it clears the horizon properly at night/day start times
+        let margin = (SUN_RADIUS / SUN_PLAYER_DISTANCE).asin();
+        let t = (self.hour - SUNRISE_START) / day_duration;
+        let angle = t * (std::f32::consts::PI + 2.0 * margin) - margin;
 
-        let len = (x * x + y * y + z * z).sqrt();
-
-        Vector3::new(x / len, y / len, z / len)
+        Vector3::new(angle.cos(), angle.sin(), 0.0)
     }
 
     pub fn sun_intensity(&self) -> f32 {

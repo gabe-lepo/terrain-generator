@@ -11,7 +11,7 @@ use raylib::prelude::Color;
 
 pub const TIME_STARTING_HOUR: f32 = SUNRISE_START;
 pub const TIME_SPEED_20_MIN: f32 = 300.0;
-pub const TIME_SPEED_DEBUG: f32 = 6000.0;
+pub const TIME_SPEED_DEBUG: f32 = 3000.0;
 
 pub const AMBIENT_DAY: f32 = 0.35;
 pub const AMBIENT_NIGHT: f32 = 0.08;
@@ -30,6 +30,10 @@ pub const SKY_COLOR_DAY: Color = Color::new(102, 178, 255, 255);
 /// Biome specific sky color tint factors
 pub const SKY_SUNRISE_TINT: Color = Color::new(230, 100, 30, 255);
 pub const SKY_SUNRISE_TINT_STRENGTH: f32 = 0.6;
+
+/// Sun sizing
+pub const SUN_RADIUS: f32 = 1_000.0;
+pub const SUN_PLAYER_DISTANCE: f32 = 5_000.0;
 
 // ============================================================================
 // GENERAL GAME CLIENT OPTIONS
@@ -71,7 +75,7 @@ pub const CROUCH_MULTIPLIER: f32 = 0.5;
 // ============================================================================
 
 /// Enable/disable network connection attempts
-pub const CONNECT: bool = true;
+pub const CONNECT: bool = false;
 
 /// Position updates sent per second
 /// Higher = smoother movement, more bandwidth
