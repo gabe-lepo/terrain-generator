@@ -29,7 +29,10 @@ use config::{
     TIME_SPEED_20_MIN, TIME_SPEED_DEBUG, TIME_STARTING_HOUR, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 
-use crate::config::{CHUNK_SIZE, TERRAIN_RESOLUTION};
+use crate::{
+    config::{CHUNK_SIZE, TERRAIN_RESOLUTION},
+    shaders::{FogConfig, SunConfig},
+};
 
 fn main() {
     // Network setup
@@ -171,7 +174,16 @@ fn main() {
         player.update(&rl_handle, &terrain_manager, dt);
 
         // Calculate fog settings based on actual view distance
-        let (fog_near, fog_far) = terrain_manager.get_fog_distances();
+        let fog_distances = terrain_manager.get_fog_distances();
+        let fog_config = FogConfig::new(fog_distances.0, fog_distances.1, time_of_day.fog_color());
+
+        // Sun configuration
+        let sun_config = SunConfig::new(
+            time_of_day.sun_direction(),
+            Color::LIGHTGOLDENRODYELLOW,
+            time_of_day.sun_intensity(),
+            time_of_day.ambient_strength(),
+        );
 
         // 2d drawing setup before 3d
         let mut draw_handle = rl_handle.begin_drawing(&rl_thread);
@@ -185,13 +197,8 @@ fn main() {
                 &mut draw3d_handle,
                 &player.get_camera(),
                 &shader_manager,
-                fog_near,
-                fog_far,
-                time_of_day.fog_color(),
-                time_of_day.sun_direction(),
-                Color::LIGHTGOLDENRODYELLOW,
-                time_of_day.sun_intensity(),
-                time_of_day.ambient_strength(),
+                fog_config,
+                sun_config,
             );
 
             // Temporary static sun ball thing
@@ -281,7 +288,7 @@ fn draw_stats(
 
     // Seed
     d.draw_text(
-        &format!("Seed: {}", terrain_manager.planet.seed.to_string()),
+        &format!("Seed: {}", terrain_manager.planet.seed),
         10,
         110,
         20,

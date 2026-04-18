@@ -79,16 +79,16 @@ impl Player {
 
         // Horizontal movements
         if rl.is_key_down(KeyboardKey::KEY_W) {
-            self.position = self.position + forward_flat * move_speed * dt;
+            self.position += forward_flat * move_speed * dt;
         }
         if rl.is_key_down(KeyboardKey::KEY_S) {
-            self.position = self.position - forward_flat * move_speed * dt;
+            self.position -= forward_flat * move_speed * dt;
         }
         if rl.is_key_down(KeyboardKey::KEY_A) {
-            self.position = self.position - right * move_speed * dt;
+            self.position -= right * move_speed * dt;
         }
         if rl.is_key_down(KeyboardKey::KEY_D) {
-            self.position = self.position + right * move_speed * dt;
+            self.position += right * move_speed * dt;
         }
 
         // ensure not clipping after horizontal movement

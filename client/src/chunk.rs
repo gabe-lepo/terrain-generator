@@ -27,7 +27,7 @@ impl ChunkCoord {
     }
 
     /// Get world position of chunk origin (bottom left corner)
-    pub fn to_world_pos(&self) -> (f32, f32) {
+    pub fn get_world_pos(&self) -> (f32, f32) {
         let world_x = self.x as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
         let world_z = self.z as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
 
@@ -61,8 +61,7 @@ impl Chunk {
             let triangle_count = vertex_count / 3;
 
             // Alloc mem for mesh data
-            let vertices_flat: Vec<f32> =
-                vertices.iter().flat_map(|v| [v.x, v.y, v.z]).collect();
+            let vertices_flat: Vec<f32> = vertices.iter().flat_map(|v| [v.x, v.y, v.z]).collect();
 
             let colors_flat: Vec<u8> = colors.iter().flat_map(|c| [c.r, c.g, c.b, c.a]).collect();
 
@@ -111,7 +110,7 @@ impl Chunk {
         if let Some(shader) = terrain_shader {
             let materials = model.materials_mut();
             if let Some(material) = materials.get_mut(0) {
-                material.as_mut().shader = shader.as_ref().clone();
+                material.as_mut().shader = *shader.as_ref();
             }
         }
 
@@ -129,7 +128,7 @@ impl Chunk {
         render_wireframe: bool,
         _shader: Option<&mut Shader>,
     ) {
-        let (world_x, world_z) = self.coord.to_world_pos();
+        let (world_x, world_z) = self.coord.get_world_pos();
         let position = Vector3::new(world_x, 0.0, world_z);
 
         if render_wireframe {

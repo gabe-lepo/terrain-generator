@@ -3,6 +3,40 @@ use raylib::prelude::*;
 
 use crate::utils::{color_to_f32, rl_to_primitive_vec3};
 
+pub struct FogConfig {
+    near_dist: f32,
+    far_dist: f32,
+    color: Color,
+}
+
+impl FogConfig {
+    pub fn new(near_dist: f32, far_dist: f32, color: Color) -> Self {
+        Self {
+            near_dist,
+            far_dist,
+            color,
+        }
+    }
+}
+
+pub struct SunConfig {
+    direction: Vector3,
+    color: Color,
+    intensity: f32,
+    ambient_strength: f32,
+}
+
+impl SunConfig {
+    pub fn new(direction: Vector3, color: Color, intensity: f32, ambient_strength: f32) -> Self {
+        Self {
+            direction,
+            color,
+            intensity,
+            ambient_strength,
+        }
+    }
+}
+
 pub struct ShaderManager {
     terrain_shader: Option<Shader>,
     // Fog uniforms
@@ -56,13 +90,8 @@ impl ShaderManager {
     pub fn update_terrain_shader(
         &self,
         camera: &Camera3D,
-        fog_near: f32,
-        fog_far: f32,
-        fog_color: Color,
-        sun_direction: Vector3,
-        sun_color: Color,
-        sun_intensity: f32,
-        ambient_strength: f32,
+        fog_config: FogConfig,
+        sun_config: SunConfig,
     ) {
         if let Some(ref shader) = self.terrain_shader {
             // Set camera position
@@ -70,16 +99,16 @@ impl ShaderManager {
             unsafe {
                 // Camera position (VEC3)
                 ffi::SetShaderValue(
-                    shader.as_ref().clone(),
+                    *shader.as_ref(),
                     self.fog_camera_loc,
                     [camera.position.x, camera.position.y, camera.position.z].as_ptr() as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC3 as i32,
                 );
 
                 // Fog color (VEC4)
-                let fog_color_norm = color_to_f32(fog_color);
+                let fog_color_norm = color_to_f32(fog_config.color);
                 ffi::SetShaderValue(
-                    shader.as_ref().clone(),
+                    *shader.as_ref(),
                     self.fog_color_loc,
                     fog_color_norm.as_ptr() as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
@@ -87,33 +116,33 @@ impl ShaderManager {
 
                 // Fog near (FLOAT)
                 ffi::SetShaderValue(
-                    shader.as_ref().clone(),
+                    *shader.as_ref(),
                     self.fog_near_loc,
-                    &fog_near as *const f32 as *const _,
+                    &fog_config.near_dist as *const f32 as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
                 );
 
                 // Fog far (FLOAT)
                 ffi::SetShaderValue(
-                    shader.as_ref().clone(),
+                    *shader.as_ref(),
                     self.fog_far_loc,
-                    &fog_far as *const f32 as *const _,
+                    &fog_config.far_dist as *const f32 as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
                 );
 
                 // Sun direction (VEC3)
-                let sun_direction_primitive = rl_to_primitive_vec3(sun_direction);
+                let sun_direction_primitive = rl_to_primitive_vec3(sun_config.direction);
                 ffi::SetShaderValue(
-                    shader.as_ref().clone(),
+                    *shader.as_ref(),
                     self.sun_direction_loc,
                     sun_direction_primitive.as_ptr() as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC3 as i32,
                 );
 
                 // Sun color (VEC3, only rgb, shader ignores alpha)
-                let sun_color_norm = color_to_f32(sun_color);
+                let sun_color_norm = color_to_f32(sun_config.color);
                 ffi::SetShaderValue(
-                    shader.as_ref().clone(),
+                    *shader.as_ref(),
                     self.sun_color_loc,
                     sun_color_norm.as_ptr() as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC3 as i32,
@@ -122,17 +151,17 @@ impl ShaderManager {
                 // Sun intensity (FLOAT)
                 // let sun_color_norm = color_to_f32(sun_color);
                 ffi::SetShaderValue(
-                    shader.as_ref().clone(),
+                    *shader.as_ref(),
                     self.sun_intensity_loc,
-                    &sun_intensity as *const f32 as *const _,
+                    &sun_config.intensity as *const f32 as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
                 );
 
                 // Ambient strength (FLOAT)
                 ffi::SetShaderValue(
-                    shader.as_ref().clone(),
+                    *shader.as_ref(),
                     self.ambient_strength_loc,
-                    &ambient_strength as *const f32 as *const _,
+                    &sun_config.ambient_strength as *const f32 as *const _,
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_FLOAT as i32,
                 );
             }

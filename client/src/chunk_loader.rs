@@ -293,7 +293,7 @@ fn generate_heightmap(coord: (i32, i32), noise: &Perlin, planet: &PlanetConfig) 
     heightmap
 }
 
-fn build_mesh_data(heightmap: &Vec<Vec<f32>>, planet: &PlanetConfig) -> (Vec<Vector3>, Vec<Color>) {
+fn build_mesh_data(heightmap: &[Vec<f32>], planet: &PlanetConfig) -> (Vec<Vector3>, Vec<Color>) {
     let grid_size = heightmap.len() - 1;
     let vertex_count = grid_size * grid_size * 6;
 
@@ -359,7 +359,7 @@ fn calculate_bounding_box(coord: (i32, i32), heightmap: &Vec<Vec<f32>>) -> Bound
     )
 }
 
-fn height_to_color(height: f32, bands: &Vec<HeightBand>) -> Color {
+fn height_to_color(height: f32, bands: &[HeightBand]) -> Color {
     // Find first band whose max_y is >= height
     for i in 0..bands.len() {
         if height <= bands[i].max_y {

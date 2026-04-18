@@ -5,7 +5,7 @@ use crate::config::{
     RENDER_WIREFRAME, VIEW_DISTANCE,
 };
 use crate::planet::PlanetConfig;
-use crate::shaders::ShaderManager;
+use crate::shaders::{FogConfig, ShaderManager, SunConfig};
 use crate::world::WorldQuery;
 
 use noise::Perlin;
@@ -268,27 +268,13 @@ impl TerrainManager {
         d: &mut RaylibMode3D<RaylibDrawHandle>,
         camera: &Camera3D,
         shader_manager: &ShaderManager,
-        fog_near: f32,
-        fog_far: f32,
-        fog_color: Color,
-        sun_direction: Vector3,
-        sun_color: Color,
-        sun_intensity: f32,
-        ambient_strength: f32,
+        fog_config: FogConfig,
+        sun_config: SunConfig,
     ) {
         let mut rendered_count = 0;
 
         // Update shader uniforms once before rendering (shaders already set on chunk materials)
-        shader_manager.update_terrain_shader(
-            camera,
-            fog_near,
-            fog_far,
-            fog_color,
-            sun_direction,
-            sun_color,
-            sun_intensity,
-            ambient_strength,
-        );
+        shader_manager.update_terrain_shader(camera, fog_config, sun_config);
 
         // Render chunks
         for chunk in self.chunks.values() {
@@ -410,13 +396,13 @@ impl WorldQuery for TerrainManager {
         // Otherwise calc directly from noise
         if let Some(chunk) = self.chunks.get(&chunk_coord) {
             // Convert world pos to local chunk coord
-            let (chunk_world_x, chunk_world_z) = chunk_coord.to_world_pos();
+            let (chunk_world_x, chunk_world_z) = chunk_coord.get_world_pos();
             let local_x = x - chunk_world_x;
             let local_z = z - chunk_world_z;
 
             chunk.get_height_at(local_x, local_z)
         } else if let Some(heightmap) = self.heightmaps.get(&chunk_coord) {
-            let (chunk_world_x, chunk_world_z) = chunk_coord.to_world_pos();
+            let (chunk_world_x, chunk_world_z) = chunk_coord.get_world_pos();
             let local_x = x - chunk_world_x;
             let local_z = z - chunk_world_z;
 
