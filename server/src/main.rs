@@ -65,7 +65,7 @@ async fn main() {
         // - current_hour is only calc'd on new connection. Maybe send it to a
         //   thread for persistent time tracking
         // - Seed switcher system on planet escape
-        const STARTING_HOUR: f32 = 6.0;
+        const STARTING_HOUR: f32 = 5.0;
         const TIME_SPEED_10_MIN: f32 = 600.0;
         const TIME_SPEED_DEBUG: f32 = 6000.0;
         const HOURS_IN_DAY: f32 = 24.0;

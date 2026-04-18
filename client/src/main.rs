@@ -24,15 +24,9 @@ use terrain_manager::TerrainManager;
 use time_of_day::TimeOfDay;
 use uuid::Uuid;
 
-use config::{
-    CONNECT, FAR_CLIP_PLANE_DISTANCE, RENDER_WIREFRAME, SUNRISE_START, SUNSET_END,
-    TIME_SPEED_20_MIN, TIME_SPEED_DEBUG, TIME_STARTING_HOUR, WINDOW_HEIGHT, WINDOW_WIDTH,
-};
+use config::*;
 
-use crate::{
-    config::{CHUNK_SIZE, TERRAIN_RESOLUTION},
-    shaders::{FogConfig, SunConfig},
-};
+use crate::shaders::{FogConfig, SunConfig};
 
 fn main() {
     // Network setup
@@ -138,10 +132,10 @@ fn main() {
                 Color::DARKGRAY,
             );
             // Bar fill
-            let fill = ((WINDOW_WIDTH - 400) as f32 * progress) as i32;
+            let fill = ((WINDOW_WIDTH - 400) as f32 * progress * 2.0) as i32;
             d.draw_rectangle(200, WINDOW_HEIGHT / 2 - 10, fill, 20, Color::GREEN);
             d.draw_text(
-                &format!("Generating planet... {:.0}%", progress * 100.0),
+                &format!("Generating planet... {:.0}%", progress * 200.0),
                 200,
                 WINDOW_HEIGHT / 2 - 40,
                 24,
@@ -153,7 +147,7 @@ fn main() {
         let dt = rl_handle.get_frame_time();
 
         // Advance time
-        time_of_day.advance(dt, TIME_SPEED_DEBUG);
+        time_of_day.advance(dt, TIME_SPEED_20_MIN);
 
         // Send position to server at configured rate
         if should_send_position_update(&mut last_position_update, dt) {

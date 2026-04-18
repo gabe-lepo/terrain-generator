@@ -41,14 +41,14 @@ pub struct PlanetConfig {
 
 impl PlanetConfig {
     pub fn new(seed: u64) -> Self {
-        let mut config = Self::desert_planet();
-        // let mut config = match seed % 5 {
-        //     0 => Self::jungle_planet(),
-        //     1 => Self::arctic_planet(),
-        //     2 => Self::desert_planet(),
-        //     3 => Self::volcanic_planet(),
-        //     _ => Self::islands_planet(),
-        // };
+        // let mut config = Self::desert_planet();
+        let mut config = match seed % 5 {
+            0 => Self::jungle_planet(),
+            1 => Self::arctic_planet(),
+            2 => Self::desert_planet(),
+            3 => Self::volcanic_planet(),
+            _ => Self::islands_planet(),
+        };
         config.seed = seed;
         config
     }
