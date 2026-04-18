@@ -92,8 +92,8 @@ impl PlanetConfig {
 // - Mountain cap (ice/snow)
 #[rustfmt::skip]
 static JUNGLE_BANDS: &[HeightBand] = &[
-    HeightBand { max_y: 0.0, color: Color::BLUEVIOLET }, // Water
-    HeightBand { max_y: 10.0, color: Color::WHEAT }, // Sand
+    HeightBand { max_y: 0.0, color: Color::MEDIUMBLUE}, // Water
+    HeightBand { max_y: 5.0, color: Color::WHEAT }, // Sand
     HeightBand { max_y: 25.0, color: Color::DARKOLIVEGREEN }, // Jungle floor
     HeightBand { max_y: 100.0, color: Color::ROSYBROWN }, // Hill
     HeightBand { max_y: 200.0, color: Color::BURLYWOOD }, // Mountain

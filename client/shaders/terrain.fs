@@ -2,8 +2,7 @@
 
 in vec3 fragPosition;
 in vec2 fragTexCoord;
-in vec4 fragColor;
-in vec3 fragNormal;
+flat in vec4 fragColor;
 
 // Fog
 uniform vec4 colDiffuse;
@@ -28,7 +27,8 @@ void main()
   vec3 ambient = ambientStrength * baseColor.rgb;
 
   // Diffuse (Lambert)
-  vec3 norm = normalize(fragNormal);
+  vec3 norm = normalize(cross(dFdx(fragPosition), dFdy(fragPosition)));
+  if (norm.y < 0.0) norm = -norm;
   float diff = max(dot(norm, normalize(sunDirection)), 0.0);
   vec3 diffuse = diff * sunIntensity * sunColor * baseColor.rgb;
 

@@ -45,10 +45,10 @@ pub const WINDOW_HEIGHT: i32 = 1440;
 pub const GOD_MODE: bool = false;
 
 /// Player move speed
-pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 15.0 };
+pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 50.0 };
 
 /// Gravity force applied after jumping
-pub const GRAVITY_FORCE: f32 = 30.0;
+pub const GRAVITY_FORCE: f32 = 60.0;
 
 /// Jump force applied when jumping
 pub const JUMP_FORCE: f32 = 30.0;
@@ -82,8 +82,6 @@ pub const POSITION_ROUND_DECIMALS: u32 = 1;
 // ============================================================================
 
 /// Size of each chunk in vertices per side (e.g., 16 = 16x16 grid)
-/// Smaller = more chunks but less memory per chunk
-/// Larger = fewer chunks but more memory per chunk
 pub const CHUNK_SIZE: i32 = 16;
 
 /// World units per vertex in the heightmap

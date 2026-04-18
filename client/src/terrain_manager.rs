@@ -25,6 +25,10 @@ pub struct TerrainManager {
     chunk_loader: ChunkLoader,
     pending_chunks: HashSet<ChunkCoord>,
     ready: bool,
+    /// Cached count of valid chunks within VIEW_DISTANCE of `last_player_chunk`,
+    /// accounting for planet grid boundary clamping. Invalidated to None whenever
+    /// `last_player_chunk` or `planet.grid_size` changes.
+    initial_mesh_expected_cache: Option<usize>,
 }
 
 impl TerrainManager {
@@ -54,11 +58,13 @@ impl TerrainManager {
             chunk_loader,
             pending_chunks: HashSet::new(),
             ready: false,
+            initial_mesh_expected_cache: None,
         }
     }
 
     /// Reinitialize world when we get seed from server
     pub fn reinit_with_seed(&mut self, seed: u64) {
+        println!("reinit_with_seed called with seed: {}", seed);
         let noise = Perlin::new(seed as u32);
         let planet = Arc::new(PlanetConfig::get_planet_config(seed));
         let chunk_loader = ChunkLoader::new(noise, Arc::clone(&planet));
@@ -81,6 +87,8 @@ impl TerrainManager {
         self.heightmaps = HashMap::new();
         self.preload_total = preload_total;
         self.preload_complete = false;
+        self.ready = false;
+        self.initial_mesh_expected_cache = None;
     }
 
     /// Update which chunks are loaded based on player pos
@@ -93,7 +101,6 @@ impl TerrainManager {
     ) {
         // Chunk preloader, block everything else until done
         if !self.preload_complete {
-            // Drain all completed heightmap-only chunks
             while let Some(data) = self.chunk_loader.poll_completed() {
                 let coord = ChunkCoord::new(data.coord.0, data.coord.1);
                 self.heightmaps.insert(coord, data.heightmap);
@@ -102,9 +109,33 @@ impl TerrainManager {
             if self.heightmaps.len() >= self.preload_total {
                 self.preload_complete = true;
                 self.ready = true;
+
+                // Immediately queue mesh builds for initial view distance
+                let center = ChunkCoord::from_world_pos(player_pos.x, player_pos.z);
+                self.last_player_chunk = Some(center);
+                self.initial_mesh_expected_cache = None;
+                let grid = self.planet.grid_size as i32;
+                for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
+                    for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
+                        let cx = center.x + dx;
+                        let cz = center.z + dz;
+                        if cx < 0 || cz < 0 || cx >= grid || cz >= grid {
+                            continue;
+                        }
+                        let coord = ChunkCoord::new(cx, cz);
+                        if let Some(heightmap) = self.heightmaps.get(&coord) {
+                            self.chunk_loader
+                                .request_mesh_from_heightmap((cx, cz), heightmap.clone());
+                            self.pending_chunks.insert(coord);
+                        }
+                    }
+                }
             }
 
-            return;
+            // Fall through to upload loop even during mesh phase
+            if !self.preload_complete {
+                return;
+            }
         }
 
         // Block until seed is available (either server seed or offline default)
@@ -121,8 +152,8 @@ impl TerrainManager {
         // - Cap chunk uploads per frame
         // - Unless loading initial chunks, then no effective cap with max usize
 
-        let expected_chunks = ((VIEW_DISTANCE * 2 + 1) * (VIEW_DISTANCE * 2 + 1)) as f32;
-        let initial_load_complete = self.chunks.len() >= (expected_chunks * 0.9).round() as usize;
+        let initial_load_complete =
+            self.chunks.len() >= (self.initial_mesh_expected() as f32 * 0.9) as usize;
         let upload_cap = if initial_load_complete {
             16
         } else {
@@ -153,6 +184,7 @@ impl TerrainManager {
         }
 
         self.last_player_chunk = Some(current_chunk);
+        self.initial_mesh_expected_cache = None;
 
         // Determine which chunks should load
         let mut chunks_to_keep = std::collections::HashSet::new();
@@ -206,15 +238,29 @@ impl TerrainManager {
     }
 
     /// Preload statuses
-    pub fn preload_progress(&self) -> f32 {
-        if self.preload_complete {
+    pub fn preload_progress(&mut self) -> f32 {
+        if !self.preload_complete {
+            return self.heightmaps.len() as f32 / self.preload_total as f32 * 0.5;
+        }
+        let expected = self.initial_mesh_expected();
+        if expected == 0 {
             return 1.0;
         }
-        self.heightmaps.len() as f32 / self.preload_total as f32
+
+        // Pending chunks are in-flight, chunks are uploaded
+        // together they represent total progress toward expected
+        let done = self.chunks.len();
+        let in_flight = self.pending_chunks.len();
+        let mesh_progress = ((done + in_flight) as f32 / expected as f32).min(1.0);
+        0.5 + mesh_progress * 0.5
     }
 
-    pub fn is_preload_complete(&self) -> bool {
-        self.preload_complete
+    pub fn is_preload_complete(&mut self) -> bool {
+        if !self.preload_complete {
+            return false;
+        }
+        let expected = self.initial_mesh_expected();
+        self.chunks.len() >= (expected as f32 * 0.9) as usize
     }
 
     pub fn render(
@@ -320,6 +366,32 @@ impl TerrainManager {
 
         // Chunk is visible if its in front with radius tolerance and within range
         dot > -radius && distance < max_distance + radius
+    }
+
+    /// Count valid chunks within VIEW_DISTANCE of `last_player_chunk`,
+    /// accounting for planet grid boundary clamping. Cached across calls and
+    /// only recomputed after cache invalidation (center move or reinit).
+    fn initial_mesh_expected(&mut self) -> usize {
+        if let Some(cached) = self.initial_mesh_expected_cache {
+            return cached;
+        }
+        let center = match self.last_player_chunk {
+            Some(c) => c,
+            None => return 1, // Avoid division by zero before first update
+        };
+        let grid = self.planet.grid_size as i32;
+        let mut count = 0;
+        for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
+            for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
+                let cx = center.x + dx;
+                let cz = center.z + dz;
+                if cx >= 0 && cz >= 0 && cx < grid && cz < grid {
+                    count += 1;
+                }
+            }
+        }
+        self.initial_mesh_expected_cache = Some(count);
+        count
     }
 }
 

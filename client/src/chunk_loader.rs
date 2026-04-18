@@ -5,7 +5,6 @@ use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio::io::Join;
 use tokio::{sync::mpsc, task::JoinSet};
 
 /// Request to generate a chunk
@@ -18,11 +17,9 @@ pub struct ChunkRequest {
 pub struct ChunkData {
     pub coord: (i32, i32),
     pub vertices: Vec<Vector3>,
-    pub indices: Vec<u16>,
     pub colors: Vec<Color>,
     pub bounding_box: BoundingBox,
     pub heightmap: Vec<Vec<f32>>,
-    pub normals: Vec<[f32; 3]>,
 }
 
 /// Request struct for heightmap mesh only
@@ -225,10 +222,12 @@ async fn chunk_loader_task(
             Some(request) = heightmap_request_rx.recv() => {
                 let planet = Arc::clone(&planet);
                 let completed_tx = completed_tx.clone();
+                let send_error_count = Arc::clone(&send_error_count);
                 tokio::spawn(async move {
                     let data = build_chunk_from_heightmap(request.coord, request.heightmap, &planet);
                     if let Err(e) = completed_tx.send(data) {
-                        println!("Failed completed_tx send: {:?}", e);
+                        let n = send_error_count.fetch_add(1, Ordering::Relaxed);
+                        println!("[{}] Failed completed_tx send: {:?}", n + 1, e);
                     }
                 });
             }
@@ -251,31 +250,24 @@ fn generate_chunk_data(
         return ChunkData {
             coord,
             vertices: vec![],
-            indices: vec![],
             colors: vec![],
-            normals: vec![],
             bounding_box: calculate_bounding_box(coord, &heightmap),
             heightmap,
         };
     }
 
     // Build mesh data
-    let (vertices, indices, colors) = build_mesh_data(&heightmap, planet);
+    let (vertices, colors) = build_mesh_data(&heightmap, planet);
 
     // Calc bounding box
     let bounding_box = calculate_bounding_box(coord, &heightmap);
 
-    // Normals
-    let normals = compute_normals(&heightmap, coord, noise, planet);
-
     ChunkData {
         coord,
         vertices,
-        indices,
         colors,
         bounding_box,
         heightmap: if GOD_MODE { vec![] } else { heightmap },
-        normals,
     }
 }
 
@@ -301,55 +293,48 @@ fn generate_heightmap(coord: (i32, i32), noise: &Perlin, planet: &PlanetConfig) 
     heightmap
 }
 
-fn build_mesh_data(
-    heightmap: &Vec<Vec<f32>>,
-    planet: &PlanetConfig,
-) -> (Vec<Vector3>, Vec<u16>, Vec<Color>) {
-    let grid_size = heightmap.len();
-    let vertex_count = grid_size * grid_size;
-    let triangle_count = (grid_size - 1) * (grid_size - 1) * 2;
+fn build_mesh_data(heightmap: &Vec<Vec<f32>>, planet: &PlanetConfig) -> (Vec<Vector3>, Vec<Color>) {
+    let grid_size = heightmap.len() - 1;
+    let vertex_count = grid_size * grid_size * 6;
 
     let mut vertices = Vec::with_capacity(vertex_count);
-    let mut indices = Vec::with_capacity(triangle_count * 3);
     let mut colors = Vec::with_capacity(vertex_count);
 
     // Generate vertices
     for z in 0..grid_size {
         for x in 0..grid_size {
-            let local_x = x as f32 * TERRAIN_RESOLUTION;
-            let local_z = z as f32 * TERRAIN_RESOLUTION;
-            let height = heightmap[z][x];
+            let v00 = Vector3::new(
+                x as f32 * TERRAIN_RESOLUTION,
+                heightmap[z][x],
+                z as f32 * TERRAIN_RESOLUTION,
+            );
+            let v10 = Vector3::new(
+                (x + 1) as f32 * TERRAIN_RESOLUTION,
+                heightmap[z][x + 1],
+                z as f32 * TERRAIN_RESOLUTION,
+            );
+            let v01 = Vector3::new(
+                x as f32 * TERRAIN_RESOLUTION,
+                heightmap[z + 1][x],
+                (z + 1) as f32 * TERRAIN_RESOLUTION,
+            );
+            let v11 = Vector3::new(
+                (x + 1) as f32 * TERRAIN_RESOLUTION,
+                heightmap[z + 1][x + 1],
+                (z + 1) as f32 * TERRAIN_RESOLUTION,
+            );
 
-            vertices.push(Vector3::new(local_x, height, local_z));
+            let c1 = height_to_color((v00.y + v01.y + v10.y) / 3.0, &planet.bands);
+            vertices.extend_from_slice(&[v00, v01, v10]);
+            colors.extend_from_slice(&[c1, c1, c1]);
+
+            let c2 = height_to_color((v10.y + v01.y + v11.y) / 3.0, &planet.bands);
+            vertices.extend_from_slice(&[v10, v01, v11]);
+            colors.extend_from_slice(&[c2, c2, c2]);
         }
     }
 
-    // Generate triangle indices
-    for z in 0..(grid_size - 1) {
-        for x in 0..(grid_size - 1) {
-            let top_left = (z * grid_size + x) as u16;
-            let top_right = top_left + 1;
-            let bottom_left = ((z + 1) * grid_size + x) as u16;
-            let bottom_right = bottom_left + 1;
-
-            indices.push(top_left);
-            indices.push(bottom_left);
-            indices.push(top_right);
-
-            indices.push(top_right);
-            indices.push(bottom_left);
-            indices.push(bottom_right);
-        }
-    }
-
-    for z in 0..grid_size {
-        for x in 0..grid_size {
-            let height = heightmap[z][x];
-            colors.push(height_to_color(height, &planet.bands));
-        }
-    }
-
-    (vertices, indices, colors)
+    (vertices, colors)
 }
 
 fn calculate_bounding_box(coord: (i32, i32), heightmap: &Vec<Vec<f32>>) -> BoundingBox {
@@ -372,49 +357,6 @@ fn calculate_bounding_box(coord: (i32, i32), heightmap: &Vec<Vec<f32>>) -> Bound
         Vector3::new(world_x, min_height, world_z),
         Vector3::new(world_x + chunk_size, max_height, world_z + chunk_size),
     )
-}
-
-fn compute_normals(
-    heightmap: &[Vec<f32>],
-    coord: (i32, i32),
-    noise: &Perlin,
-    planet: &PlanetConfig,
-) -> Vec<[f32; 3]> {
-    let grid_size = heightmap.len();
-    let mut normals = Vec::with_capacity(grid_size * grid_size);
-    let last = grid_size - 1;
-
-    let chunk_world_x = coord.0 as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
-    let chunk_world_z = coord.1 as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
-
-    for z in 0..grid_size {
-        for x in 0..grid_size {
-            let h_right = if x < last {
-                heightmap[z][x + 1]
-            } else {
-                let wx = chunk_world_x + (x + 1) as f32 * TERRAIN_RESOLUTION;
-                let wz = chunk_world_z + z as f32 * TERRAIN_RESOLUTION;
-                ChunkLoader::get_height(wx, wz, noise, planet)
-            };
-
-            let h_down = if z < last {
-                heightmap[z + 1][x]
-            } else {
-                let wx = chunk_world_x + x as f32 * TERRAIN_RESOLUTION;
-                let wz = chunk_world_z + (z + 1) as f32 * TERRAIN_RESOLUTION;
-                ChunkLoader::get_height(wx, wz, noise, planet)
-            };
-
-            let nx = heightmap[z][x] - h_right;
-            let ny = TERRAIN_RESOLUTION;
-            let nz = heightmap[z][x] - h_down;
-
-            let len = (nx * nx + ny * ny + nz * nz).sqrt();
-            normals.push([nx / len, ny / len, nz / len]);
-        }
-    }
-
-    normals
 }
 
 fn height_to_color(height: f32, bands: &Vec<HeightBand>) -> Color {
@@ -444,17 +386,14 @@ fn build_chunk_from_heightmap(
     heightmap: Vec<Vec<f32>>,
     planet: &PlanetConfig,
 ) -> ChunkData {
-    let (vertices, indices, colors) = build_mesh_data(&heightmap, planet);
+    let (vertices, colors) = build_mesh_data(&heightmap, planet);
     let bbox = calculate_bounding_box(coord, &heightmap);
-    let normals = vec![];
 
     ChunkData {
         coord,
         vertices,
-        indices,
         colors,
         bounding_box: bbox,
         heightmap: if GOD_MODE { vec![] } else { heightmap },
-        normals,
     }
 }

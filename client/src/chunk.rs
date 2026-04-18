@@ -51,35 +51,24 @@ impl Chunk {
     ) -> Self {
         let coord = ChunkCoord::new(data.coord.0, data.coord.1);
         let vertices = data.vertices;
-        let indices = data.indices;
         let colors = data.colors;
         let bounding_box = data.bounding_box;
-        let normals = data.normals;
 
         // WARN: Unsafe FFI calls
         // Build mesh from pre-generated data
         let mesh = unsafe {
             let vertex_count = vertices.len() as i32;
-            let triangle_count = (indices.len() / 3) as i32;
+            let triangle_count = vertex_count / 3;
 
             // Alloc mem for mesh data
             let vertices_flat: Vec<f32> =
-                vertices.iter().flat_map(|v| vec![v.x, v.y, v.z]).collect();
+                vertices.iter().flat_map(|v| [v.x, v.y, v.z]).collect();
 
-            let colors_flat: Vec<u8> = colors
-                .iter()
-                .flat_map(|c| vec![c.r, c.g, c.b, c.a])
-                .collect();
-
-            // Normals (simple up pointing for now)
-            let normals_flat: Vec<f32> = normals.iter().flat_map(|n| [n[0], n[1], n[2]]).collect();
+            let colors_flat: Vec<u8> = colors.iter().flat_map(|c| [c.r, c.g, c.b, c.a]).collect();
 
             // Copy
             let vertices_ptr =
                 libc::malloc(vertices_flat.len() * std::mem::size_of::<f32>()) as *mut f32;
-            let indices_ptr = libc::malloc(indices.len() * std::mem::size_of::<u16>()) as *mut u16;
-            let normals_ptr =
-                libc::malloc(normals_flat.len() * std::mem::size_of::<f32>()) as *mut f32;
             let colors_ptr = libc::malloc(colors_flat.len() * std::mem::size_of::<u8>()) as *mut u8;
 
             std::ptr::copy_nonoverlapping(
@@ -87,16 +76,14 @@ impl Chunk {
                 vertices_ptr,
                 vertices_flat.len(),
             );
-            std::ptr::copy_nonoverlapping(indices.as_ptr(), indices_ptr, indices.len());
-            std::ptr::copy_nonoverlapping(normals_flat.as_ptr(), normals_ptr, normals_flat.len());
             std::ptr::copy_nonoverlapping(colors_flat.as_ptr(), colors_ptr, colors_flat.len());
 
             let mut mesh = ffi::Mesh {
                 vertexCount: vertex_count,
                 triangleCount: triangle_count,
                 vertices: vertices_ptr,
-                indices: indices_ptr,
-                normals: normals_ptr,
+                indices: std::ptr::null_mut(),
+                normals: std::ptr::null_mut(),
                 colors: colors_ptr,
                 texcoords: std::ptr::null_mut(),
                 texcoords2: std::ptr::null_mut(),

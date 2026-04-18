@@ -69,10 +69,11 @@ fn main() {
     let mut time_of_day = TimeOfDay::new(TIME_STARTING_HOUR);
 
     // Terrain manager setup
-    let mut terrain_manager = TerrainManager::new(0);
-    if !CONNECT {
-        terrain_manager.reinit_with_seed(12345);
-    }
+    let mut terrain_manager = if CONNECT {
+        TerrainManager::new(0)
+    } else {
+        TerrainManager::new(12345)
+    };
 
     // Player setup
     let center_chunk =
@@ -105,6 +106,7 @@ fn main() {
                     println!("Player {} disconnected", player_id);
                 }
                 NetworkEvent::WorldSync { seed, hour } => {
+                    println!("WorldSync received, seed={} hour={}", seed, hour);
                     time_of_day.set_hour(hour);
                     terrain_manager.reinit_with_seed(seed);
                     println!("World synced: Seed: {} | Hour: {:.2}", seed, hour);
