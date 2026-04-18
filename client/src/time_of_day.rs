@@ -1,7 +1,4 @@
-use crate::config::{
-    AMBIENT_DAY, AMBIENT_NIGHT, SKY_COLOR_DAY, SKY_COLOR_NIGHT, SKY_COLOR_SUNRISE, SUNRISE_END,
-    SUNRISE_START, SUNSET_END, SUNSET_START,
-};
+use crate::config::*;
 use raylib::prelude::*;
 
 const HOURS_IN_DAY: f32 = 24.0;
@@ -10,13 +7,15 @@ const SECONDS_IN_HOUR: f32 = 3600.0;
 pub struct TimeOfDay {
     hour: f32,
     paused: bool,
+    sky_color: Color,
 }
 
 impl TimeOfDay {
-    pub fn new(hour: f32) -> Self {
+    pub fn new(sky_color: Color) -> Self {
         Self {
-            hour: hour.rem_euclid(HOURS_IN_DAY),
+            hour: TIME_STARTING_HOUR.rem_euclid(HOURS_IN_DAY),
             paused: false,
+            sky_color,
         }
     }
 
@@ -85,22 +84,29 @@ impl TimeOfDay {
             SKY_COLOR_NIGHT
         } else if self.hour < sunrise_mid {
             t = (self.hour - SUNRISE_START) / (sunrise_mid - SUNRISE_START);
-            SKY_COLOR_NIGHT.lerp(SKY_COLOR_SUNRISE, t)
+            SKY_COLOR_NIGHT.lerp(self.sunrise_color(), t)
         } else if self.hour < SUNRISE_END {
             t = (self.hour - sunrise_mid) / (SUNRISE_END - sunrise_mid);
-            SKY_COLOR_SUNRISE.lerp(SKY_COLOR_DAY, t)
+            self.sunrise_color().lerp(self.sky_color, t)
         } else if self.hour < SUNSET_START {
-            SKY_COLOR_DAY
+            self.sky_color
         } else if self.hour < sunset_mid {
             t = (self.hour - SUNSET_START) / (sunset_mid - SUNSET_START);
-            SKY_COLOR_DAY.lerp(SKY_COLOR_SUNRISE, t)
+            self.sky_color.lerp(self.sunrise_color(), t)
         } else {
             t = (self.hour - sunset_mid) / (SUNSET_END - sunset_mid);
-            SKY_COLOR_SUNRISE.lerp(SKY_COLOR_NIGHT, t)
+            self.sunrise_color().lerp(SKY_COLOR_NIGHT, t)
         }
     }
 
     pub fn fog_color(&self) -> Color {
         self.sky_color()
+    }
+
+    // Private
+
+    fn sunrise_color(&self) -> Color {
+        self.sky_color
+            .lerp(SKY_SUNRISE_TINT, SKY_SUNRISE_TINT_STRENGTH)
     }
 }

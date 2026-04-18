@@ -27,6 +27,10 @@ pub const SKY_COLOR_NIGHT: Color = Color::new(3, 3, 8, 255);
 pub const SKY_COLOR_SUNRISE: Color = Color::new(230, 102, 38, 255);
 pub const SKY_COLOR_DAY: Color = Color::new(102, 178, 255, 255);
 
+/// Biome specific sky color tint factors
+pub const SKY_SUNRISE_TINT: Color = Color::new(230, 100, 30, 255);
+pub const SKY_SUNRISE_TINT_STRENGTH: f32 = 0.6;
+
 // ============================================================================
 // GENERAL GAME CLIENT OPTIONS
 // ============================================================================
@@ -42,7 +46,7 @@ pub const WINDOW_HEIGHT: i32 = 1440;
 // ============================================================================
 
 /// God mode or not (flying, higher speed, no collision)
-pub const GOD_MODE: bool = false;
+pub const GOD_MODE: bool = true;
 
 /// Player move speed
 pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 50.0 };
@@ -67,7 +71,7 @@ pub const CROUCH_MULTIPLIER: f32 = 0.5;
 // ============================================================================
 
 /// Enable/disable network connection attempts
-pub const CONNECT: bool = false;
+pub const CONNECT: bool = true;
 
 /// Position updates sent per second
 /// Higher = smoother movement, more bandwidth

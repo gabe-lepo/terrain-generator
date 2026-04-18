@@ -32,8 +32,7 @@ in Rust.
 
 ### General bugs/tasks
 
-- Fix obvious height differences between biome boundaries
-- Reduce RAM usage with higher view distances
+- "noise" artifact when viewing terrain up close
 - Move configs to shared, in case we need more complex server configs
 
 ## Running

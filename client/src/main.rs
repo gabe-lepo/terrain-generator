@@ -36,7 +36,7 @@ use crate::{
 
 fn main() {
     // Network setup
-    let server_config = ServerConfig::default(); // Will configure later by user
+    let server_config = ServerConfig::default();
     let (network_handle, mut network_events) = spawn_network_task(server_config);
     let mut remote_players: HashMap<Uuid, RemotePlayer> = HashMap::new();
 
@@ -68,15 +68,11 @@ fn main() {
     // timers
     let mut last_position_update = 0.0;
 
-    // Time of day setup
-    let mut time_of_day = TimeOfDay::new(TIME_STARTING_HOUR);
-
     // Terrain manager setup
-    let mut terrain_manager = if CONNECT {
-        TerrainManager::new(0)
-    } else {
-        TerrainManager::new(12345)
-    };
+    let mut terrain_manager = TerrainManager::new();
+
+    // Time of day setup
+    let mut time_of_day = TimeOfDay::new(terrain_manager.planet.sky_color);
 
     // Player setup
     let center_chunk =
@@ -109,7 +105,6 @@ fn main() {
                     println!("Player {} disconnected", player_id);
                 }
                 NetworkEvent::WorldSync { seed, hour } => {
-                    println!("WorldSync received, seed={} hour={}", seed, hour);
                     time_of_day.set_hour(hour);
                     terrain_manager.reinit_with_seed(seed);
                     println!("World synced: Seed: {} | Hour: {:.2}", seed, hour);
@@ -158,7 +153,7 @@ fn main() {
         let dt = rl_handle.get_frame_time();
 
         // Advance time
-        time_of_day.advance(dt, TIME_SPEED_20_MIN);
+        time_of_day.advance(dt, TIME_SPEED_DEBUG);
 
         // Send position to server at configured rate
         if should_send_position_update(&mut last_position_update, dt) {

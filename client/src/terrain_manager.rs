@@ -1,8 +1,8 @@
 use crate::chunk::{Chunk, ChunkCoord, sample_heightmap};
 use crate::chunk_loader::ChunkLoader;
 use crate::config::{
-    CHUNK_SIZE, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT, MAX_DISTANCE_BUFFER,
-    RENDER_WIREFRAME, VIEW_DISTANCE,
+    CHUNK_SIZE, CONNECT, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT,
+    MAX_DISTANCE_BUFFER, RENDER_WIREFRAME, VIEW_DISTANCE,
 };
 use crate::planet::PlanetConfig;
 use crate::shaders::{FogConfig, ShaderManager, SunConfig};
@@ -32,9 +32,10 @@ pub struct TerrainManager {
 }
 
 impl TerrainManager {
-    pub fn new(seed: u64) -> Self {
+    pub fn new() -> Self {
+        let seed = if CONNECT { 0 } else { 12345 };
         let noise = Perlin::new(seed as u32);
-        let planet = Arc::new(PlanetConfig::get_planet_config(seed));
+        let planet = Arc::new(PlanetConfig::new(seed));
         let chunk_loader = ChunkLoader::new(noise, Arc::clone(&planet));
 
         let grid = planet.grid_size as i32;
@@ -66,7 +67,7 @@ impl TerrainManager {
     pub fn reinit_with_seed(&mut self, seed: u64) {
         println!("reinit_with_seed called with seed: {}", seed);
         let noise = Perlin::new(seed as u32);
-        let planet = Arc::new(PlanetConfig::get_planet_config(seed));
+        let planet = Arc::new(PlanetConfig::new(seed));
         let chunk_loader = ChunkLoader::new(noise, Arc::clone(&planet));
 
         let grid = planet.grid_size as i32;
