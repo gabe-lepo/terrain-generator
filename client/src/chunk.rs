@@ -122,12 +122,7 @@ impl Chunk {
         }
     }
 
-    pub fn render(
-        &self,
-        d: &mut RaylibMode3D<RaylibDrawHandle>,
-        render_wireframe: bool,
-        _shader: Option<&mut Shader>,
-    ) {
+    pub fn render(&self, d: &mut RaylibMode3D<RaylibDrawHandle>, render_wireframe: bool) {
         let (world_x, world_z) = self.coord.get_world_pos();
         let position = Vector3::new(world_x, 0.0, world_z);
 

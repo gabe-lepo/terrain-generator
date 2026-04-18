@@ -280,7 +280,7 @@ impl TerrainManager {
         // Render chunks
         for chunk in self.chunks.values() {
             if Self::is_chunk_potentially_visible(camera, chunk) {
-                chunk.render(d, RENDER_WIREFRAME, None);
+                chunk.render(d, RENDER_WIREFRAME);
                 rendered_count += 1;
             }
         }
