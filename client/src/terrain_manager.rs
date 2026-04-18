@@ -1,4 +1,4 @@
-use crate::chunk::{Chunk, ChunkCoord};
+use crate::chunk::{Chunk, ChunkCoord, sample_heightmap};
 use crate::chunk_loader::ChunkLoader;
 use crate::config::{
     CHUNK_SIZE, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT, MAX_DISTANCE_BUFFER,
@@ -15,6 +15,9 @@ use std::sync::Arc;
 
 pub struct TerrainManager {
     chunks: HashMap<ChunkCoord, Chunk>,
+    heightmaps: HashMap<ChunkCoord, Vec<Vec<f32>>>,
+    preload_total: usize,
+    preload_complete: bool,
     noise: Perlin,
     last_player_chunk: Option<ChunkCoord>,
     last_rendered_count: usize,
@@ -30,8 +33,20 @@ impl TerrainManager {
         let planet = Arc::new(PlanetConfig::get_planet_config(seed));
         let chunk_loader = ChunkLoader::new(noise, Arc::clone(&planet));
 
+        let grid = planet.grid_size as i32;
+        let preload_total = (grid * grid) as usize;
+
+        for x in 0..grid {
+            for z in 0..grid {
+                chunk_loader.request_heightmap_only((x, z));
+            }
+        }
+
         Self {
             chunks: HashMap::new(),
+            heightmaps: HashMap::new(),
+            preload_total,
+            preload_complete: false,
             noise,
             last_player_chunk: None,
             last_rendered_count: 0,
@@ -48,13 +63,24 @@ impl TerrainManager {
         let planet = Arc::new(PlanetConfig::get_planet_config(seed));
         let chunk_loader = ChunkLoader::new(noise, Arc::clone(&planet));
 
+        let grid = planet.grid_size as i32;
+        let preload_total = (grid * grid) as usize;
+
+        for x in 0..grid {
+            for z in 0..grid {
+                chunk_loader.request_heightmap_only((x, z));
+            }
+        }
+
         self.noise = noise;
         self.planet = planet;
         self.chunk_loader = chunk_loader;
         self.chunks.clear();
         self.pending_chunks.clear();
         self.last_player_chunk = None;
-        self.ready = true;
+        self.heightmaps = HashMap::new();
+        self.preload_total = preload_total;
+        self.preload_complete = false;
     }
 
     /// Update which chunks are loaded based on player pos
@@ -65,6 +91,25 @@ impl TerrainManager {
         thread: &RaylibThread,
         terrain_shader: Option<&Shader>,
     ) {
+        // Chunk preloader, block everything else until done
+        if !self.preload_complete {
+            // Drain all completed heightmap-only chunks
+            while let Some(data) = self.chunk_loader.poll_completed() {
+                let coord = ChunkCoord::new(data.coord.0, data.coord.1);
+                self.heightmaps.insert(coord, data.heightmap);
+            }
+
+            if self.heightmaps.len() >= self.preload_total {
+                self.preload_complete = true;
+                self.ready = true;
+            }
+
+            return;
+        }
+
+        // Block until seed is available (either server seed or offline default)
+        // NOTE: Its very likely the seed is available once the chunks are preloaded
+        // might be able to remove this
         if !self.ready {
             return;
         }
@@ -115,9 +160,18 @@ impl TerrainManager {
         // Cap chunk load requests
         let mut new_requests: Vec<(i32, ChunkCoord)> = Vec::new();
 
+        let grid = self.planet.grid_size as i32;
         for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
             for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
-                let chunk_coord = ChunkCoord::new(current_chunk.x + dx, current_chunk.z + dz);
+                let cx = current_chunk.x + dx;
+                let cz = current_chunk.z + dz;
+
+                // Clamp to planet boundary
+                if cx < 0 || cz < 0 || cx >= grid || cz >= grid {
+                    continue;
+                }
+
+                let chunk_coord = ChunkCoord::new(cx, cz);
                 chunks_to_keep.insert(chunk_coord);
 
                 // Request which chunks should load
@@ -134,7 +188,13 @@ impl TerrainManager {
         new_requests.sort_unstable_by_key(|(d, _)| *d);
 
         for (_, coord) in new_requests {
-            self.chunk_loader.request_chunk((coord.x, coord.z));
+            if self.heightmaps.contains_key(&coord) {
+                let heightmap = self.heightmaps[&coord].clone();
+                self.chunk_loader
+                    .request_mesh_from_heightmap((coord.x, coord.z), heightmap);
+            } else {
+                self.chunk_loader.request_chunk((coord.x, coord.z));
+            }
             self.pending_chunks.insert(coord);
         }
 
@@ -143,6 +203,18 @@ impl TerrainManager {
             .retain(|coord, _| chunks_to_keep.contains(coord));
         self.pending_chunks
             .retain(|coord| chunks_to_keep.contains(coord));
+    }
+
+    /// Preload statuses
+    pub fn preload_progress(&self) -> f32 {
+        if self.preload_complete {
+            return 1.0;
+        }
+        self.heightmaps.len() as f32 / self.preload_total as f32
+    }
+
+    pub fn is_preload_complete(&self) -> bool {
+        self.preload_complete
     }
 
     pub fn render(
@@ -253,8 +325,14 @@ impl TerrainManager {
 
 impl WorldQuery for TerrainManager {
     fn get_height_at(&self, x: f32, z: f32) -> f32 {
-        // Determine which chunk contains this position
         let chunk_coord = ChunkCoord::from_world_pos(x, z);
+        let grid = self.planet.grid_size as i32;
+
+        // Clamp to world bound
+        if chunk_coord.x < 0 || chunk_coord.z < 0 || chunk_coord.x >= grid || chunk_coord.z >= grid
+        {
+            return self.planet.base_height;
+        }
 
         // If chunk is loaded, used cached heightmap
         // Otherwise calc directly from noise
@@ -265,6 +343,12 @@ impl WorldQuery for TerrainManager {
             let local_z = z - chunk_world_z;
 
             chunk.get_height_at(local_x, local_z)
+        } else if let Some(heightmap) = self.heightmaps.get(&chunk_coord) {
+            let (chunk_world_x, chunk_world_z) = chunk_coord.to_world_pos();
+            let local_x = x - chunk_world_x;
+            let local_z = z - chunk_world_z;
+
+            sample_heightmap(heightmap, local_x, local_z)
         } else {
             // Chunk not loaded, calc from noise
             self.calculate_height_from_noise(x, z)

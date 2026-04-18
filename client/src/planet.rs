@@ -21,6 +21,7 @@ pub struct HeightBand {
 
 #[derive(Clone)]
 pub struct PlanetConfig {
+    pub grid_size: u32,
     pub seed: u64,
     pub planet_type: PlanetType,
     pub bands: Vec<HeightBand>,
@@ -64,6 +65,7 @@ impl PlanetConfig {
     // Private
     fn jungle_planet() -> Self {
         Self {
+            grid_size: 128,
             seed: 0,
             planet_type: PlanetType::Jungle,
             bands: JUNGLE_BANDS.to_vec(),

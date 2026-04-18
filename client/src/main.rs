@@ -29,6 +29,8 @@ use config::{
     TIME_SPEED_20_MIN, TIME_SPEED_DEBUG, TIME_STARTING_HOUR, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 
+use crate::config::{CHUNK_SIZE, TERRAIN_RESOLUTION};
+
 fn main() {
     // Network setup
     let server_config = ServerConfig::default(); // Will configure later by user
@@ -56,9 +58,6 @@ fn main() {
         raylib::ffi::rlSetClipPlanes(0.01, FAR_CLIP_PLANE_DISTANCE as f64);
     }
 
-    // Player setup
-    let mut player = Player::new(Vector3::new(-705.0, 50.0, 227.0));
-
     // Shader setup
     let mut shader_manager = ShaderManager::new();
     shader_manager.load_shaders(&mut rl_handle, &rl_thread);
@@ -74,6 +73,11 @@ fn main() {
     if !CONNECT {
         terrain_manager.reinit_with_seed(12345);
     }
+
+    // Player setup
+    let center_chunk =
+        (terrain_manager.planet.grid_size as f32 / 2.0) * (CHUNK_SIZE as f32 * TERRAIN_RESOLUTION);
+    let mut player = Player::new(Vector3::new(center_chunk, 50.0, center_chunk));
 
     // Main loop
     while !rl_handle.window_should_close() {
@@ -116,9 +120,35 @@ fn main() {
             0.0
         };
 
-        // Update chunks based on player pos
+        // Terrain setup and updating
         let terrain_shader = shader_manager.get_terrain_shader();
         terrain_manager.update(player.position, &mut rl_handle, &rl_thread, terrain_shader);
+
+        // Wait for preload
+        if !terrain_manager.is_preload_complete() {
+            let progress = terrain_manager.preload_progress();
+            let mut d = rl_handle.begin_drawing(&rl_thread);
+            d.clear_background(Color::BLACK);
+            // Bar background
+            d.draw_rectangle(
+                200,
+                WINDOW_HEIGHT / 2 - 10,
+                WINDOW_WIDTH - 400,
+                20,
+                Color::DARKGRAY,
+            );
+            // Bar fill
+            let fill = ((WINDOW_WIDTH - 400) as f32 * progress) as i32;
+            d.draw_rectangle(200, WINDOW_HEIGHT / 2 - 10, fill, 20, Color::GREEN);
+            d.draw_text(
+                &format!("Generating planet... {:.0}%", progress * 100.0),
+                200,
+                WINDOW_HEIGHT / 2 - 40,
+                24,
+                Color::WHITE,
+            );
+            continue;
+        }
 
         let dt = rl_handle.get_frame_time();
 

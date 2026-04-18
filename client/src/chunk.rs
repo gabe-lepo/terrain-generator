@@ -154,41 +154,38 @@ impl Chunk {
         }
     }
 
+    /// Wrapper exposing free func so others can easily use without self
     pub fn get_height_at(&self, local_x: f32, local_z: f32) -> f32 {
-        // Convert local coords to grid coords
-        let grid_x = local_x / TERRAIN_RESOLUTION;
-        let grid_z = local_z / TERRAIN_RESOLUTION;
-
-        // Get grid square corners
-        let x0 = grid_x.floor() as i32;
-        let z0 = grid_z.floor() as i32;
-        let x1 = x0 + 1;
-        let z1 = z0 + 1;
-
-        let grid_size = self.heightmap.len() as i32;
-
-        // Bounds check
-        if x0 < 0 || x1 >= grid_size || z0 < 0 || z1 >= grid_size {
-            return 0.0;
-        }
-
-        // Get 4 corner heights
-        let h00 = self.heightmap[z0 as usize][x0 as usize];
-        let h10 = self.heightmap[z0 as usize][x1 as usize];
-        let h01 = self.heightmap[z1 as usize][x0 as usize];
-        let h11 = self.heightmap[z1 as usize][x1 as usize];
-
-        // Calc interpolation weights
-        let fx = grid_x - (x0 as f32);
-        let fz = grid_z - (z0 as f32);
-
-        // Bilinear interp
-        let h0 = h00 * (1.0 - fx) + h10 * fx;
-        let h1 = h01 * (1.0 - fx) + h11 * fx;
-        let height = h0 * (1.0 - fz) + h1 * fz;
-
-        height
+        sample_heightmap(&self.heightmap, local_x, local_z)
     }
 
     // Private
+}
+
+pub fn sample_heightmap(heightmap: &[Vec<f32>], local_x: f32, local_z: f32) -> f32 {
+    let grid_x = local_x / TERRAIN_RESOLUTION;
+    let grid_z = local_z / TERRAIN_RESOLUTION;
+
+    let x0 = grid_x.floor() as i32;
+    let z0 = grid_z.floor() as i32;
+    let x1 = x0 + 1;
+    let z1 = z0 + 1;
+
+    let grid_size = heightmap.len() as i32;
+
+    if x0 < 0 || x1 >= grid_size || z0 < 0 || z1 >= grid_size {
+        return 0.0;
+    }
+
+    let h00 = heightmap[z0 as usize][x0 as usize];
+    let h10 = heightmap[z0 as usize][x1 as usize];
+    let h01 = heightmap[z1 as usize][x0 as usize];
+    let h11 = heightmap[z1 as usize][x1 as usize];
+
+    let fx = grid_x - x0 as f32;
+    let fz = grid_z - z0 as f32;
+
+    let h0 = h00 * (1.0 - fx) + h10 * fx;
+    let h1 = h01 * (1.0 - fx) + h11 * fx;
+    h0 * (1.0 - fz) + h1 * fz
 }

@@ -42,7 +42,7 @@ pub const WINDOW_HEIGHT: i32 = 1440;
 // ============================================================================
 
 /// God mode or not (flying, higher speed, no collision)
-pub const GOD_MODE: bool = true;
+pub const GOD_MODE: bool = false;
 
 /// Player move speed
 pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 15.0 };
@@ -119,4 +119,4 @@ pub const FAR_CLIP_PLANE_DISTANCE: f32 =
     (VIEW_DISTANCE as f32) * (CHUNK_SIZE as f32) * TERRAIN_RESOLUTION;
 
 /// How many chunks to load in each direction from player
-pub const VIEW_DISTANCE: i32 = 75;
+pub const VIEW_DISTANCE: i32 = 150;
