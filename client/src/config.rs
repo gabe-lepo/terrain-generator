@@ -25,7 +25,7 @@ pub const AMBIENT_NIGHT: f32 = 0.08;
 
 /// Sun sizing
 pub const SUN_RADIUS: f32 = 1_000.0;
-pub const SUN_PLAYER_DISTANCE: f32 = 5_000.0;
+pub const SUN_PLAYER_DISTANCE: f32 = 10_000.0;
 
 // ============================================================================
 // GENERAL GAME CLIENT OPTIONS

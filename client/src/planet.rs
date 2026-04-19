@@ -158,8 +158,8 @@ impl PlanetConfig {
             persistence: 0.35,
             lacunarity: 1.8,
             freq_scale: 0.0025,
-            continent_freq: 0.002,
-            water_threshold: 0.4,
+            continent_freq: 0.001,
+            water_threshold: 0.1,
             continent_slope: 1.5,
         }
     }
