@@ -1,4 +1,5 @@
-use crate::config::{CHUNK_LOADER_THREAD_POOLS, CHUNK_SIZE, GOD_MODE, TERRAIN_RESOLUTION};
+use crate::chunk_batch::{BATCH_SIZE, BatchCoord};
+use crate::config::*;
 use crate::planet::{HeightBand, PlanetConfig};
 
 use noise::{NoiseFn, Perlin};
@@ -22,10 +23,24 @@ pub struct ChunkData {
     pub heightmap: Vec<Vec<f32>>,
 }
 
+/// Data for batch of chunks
+pub struct BatchData {
+    pub coord: BatchCoord,
+    pub vertices: Vec<Vector3>,
+    pub colors: Vec<Color>,
+    pub bbox: BoundingBox,
+}
+
 /// Request struct for heightmap mesh only
 pub struct HeightmapMeshRequest {
     pub coord: (i32, i32),
     pub heightmap: Vec<Vec<f32>>,
+}
+
+/// Chunk batch request
+pub struct BatchRequest {
+    pub coord: BatchCoord,
+    pub heightmaps: Box<[[Vec<Vec<f32>>; BATCH_SIZE]; BATCH_SIZE]>,
 }
 
 /// Handle for chunk throughput
@@ -34,6 +49,8 @@ pub struct ChunkLoader {
     heightmap_request_tx: mpsc::UnboundedSender<HeightmapMeshRequest>,
     completed_rx: mpsc::UnboundedReceiver<ChunkData>,
     shutdown_tx: tokio::sync::oneshot::Sender<()>,
+    batch_request_tx: mpsc::UnboundedSender<BatchRequest>,
+    batch_completed_rx: mpsc::UnboundedReceiver<BatchData>,
 }
 
 impl ChunkLoader {
@@ -44,6 +61,8 @@ impl ChunkLoader {
         let (heightmap_request_tx, heightmap_request_rx) =
             mpsc::unbounded_channel::<HeightmapMeshRequest>();
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let (batch_request_tx, batch_request_rx) = mpsc::unbounded_channel::<BatchRequest>();
+        let (batch_completed_tx, batch_completed_rx) = mpsc::unbounded_channel::<BatchData>();
 
         // Shared ref counters
         let noise = Arc::new(noise);
@@ -61,7 +80,9 @@ impl ChunkLoader {
                     request_rx,
                     heightmap_request_rx,
                     completed_tx,
+                    batch_completed_tx,
                     shutdown_rx,
+                    batch_request_rx,
                     noise,
                     planet,
                 )
@@ -73,7 +94,9 @@ impl ChunkLoader {
             request_tx,
             heightmap_request_tx,
             completed_rx,
+            batch_completed_rx,
             shutdown_tx,
+            batch_request_tx,
         }
     }
 
@@ -95,6 +118,17 @@ impl ChunkLoader {
         }
     }
 
+    /// Request batch to be generated
+    pub fn request_batch(
+        &self,
+        coord: BatchCoord,
+        heightmaps: Box<[[Vec<Vec<f32>>; BATCH_SIZE]; BATCH_SIZE]>,
+    ) {
+        let _ = self
+            .batch_request_tx
+            .send(BatchRequest { coord, heightmaps });
+    }
+
     pub fn request_mesh_from_heightmap(&self, coord: (i32, i32), heightmap: Vec<Vec<f32>>) {
         if let Err(e) = self
             .heightmap_request_tx
@@ -107,6 +141,10 @@ impl ChunkLoader {
     /// Poll for completed chunks, non blocking
     pub fn poll_completed(&mut self) -> Option<ChunkData> {
         self.completed_rx.try_recv().ok()
+    }
+
+    pub fn poll_batch_completed(&mut self) -> Option<BatchData> {
+        self.batch_completed_rx.try_recv().ok()
     }
 
     /// NOTE: This is the main terrain "shaping" function
@@ -177,7 +215,9 @@ async fn chunk_loader_task(
     mut request_rx: mpsc::UnboundedReceiver<ChunkRequest>,
     mut heightmap_request_rx: mpsc::UnboundedReceiver<HeightmapMeshRequest>,
     completed_tx: mpsc::UnboundedSender<ChunkData>,
+    batch_completed_tx: mpsc::UnboundedSender<BatchData>,
     mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+    mut batch_request_rx: mpsc::UnboundedReceiver<BatchRequest>,
     noise: Arc<Perlin>,
     planet: Arc<PlanetConfig>,
 ) {
@@ -228,6 +268,18 @@ async fn chunk_loader_task(
                     if let Err(e) = completed_tx.send(data) {
                         let n = send_error_count.fetch_add(1, Ordering::Relaxed);
                         println!("[{}] Failed completed_tx send: {:?}", n + 1, e);
+                    }
+                });
+            }
+            Some(request) = batch_request_rx.recv() => {
+                let planet = Arc::clone(&planet);
+                let batch_completed_tx = batch_completed_tx.clone();
+                let send_error_count = Arc::clone(&send_error_count);
+                tokio::spawn(async move {
+                    let data = build_batch_data(request.coord, &request.heightmaps, &planet);
+                    if let Err(e) = batch_completed_tx.send(data) {
+                        let n = send_error_count.fetch_add(1, Ordering::Relaxed);
+                        println!("[{}] Failed batch_completed_tx send: {:?}", n + 1, e);
                     }
                 });
             }
@@ -395,5 +447,62 @@ fn build_chunk_from_heightmap(
         colors,
         bounding_box: bbox,
         heightmap: if GOD_MODE { vec![] } else { heightmap },
+    }
+}
+
+pub fn build_batch_data(
+    coord: BatchCoord,
+    heightmaps: &[[Vec<Vec<f32>>; BATCH_SIZE]; BATCH_SIZE],
+    planet: &PlanetConfig,
+) -> BatchData {
+    let chunk_world_size = CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
+    let (origin_cx, origin_cz) = coord.origin_chunk();
+    let origin_world_x = origin_cx as f32 * chunk_world_size;
+    let origin_world_z = origin_cz as f32 * chunk_world_size;
+
+    let verts_per_chunk = CHUNK_SIZE * CHUNK_SIZE * 6;
+    let mut vertices = Vec::with_capacity(BATCH_SIZE * BATCH_SIZE * verts_per_chunk as usize);
+    let mut colors = Vec::with_capacity(BATCH_SIZE * BATCH_SIZE * verts_per_chunk as usize);
+
+    let mut min_height = f32::MAX;
+    let mut max_height = f32::MIN;
+
+    for dz in 0..BATCH_SIZE {
+        for dx in 0..BATCH_SIZE {
+            let offset_x = dx as f32 * chunk_world_size;
+            let offset_z = dz as f32 * chunk_world_size;
+            let heightmap = &heightmaps[dz][dx];
+
+            let (chunk_verts, chunk_colors) = build_mesh_data(heightmap, planet);
+
+            for v in &chunk_verts {
+                min_height = min_height.min(v.y);
+                max_height = max_height.max(v.y);
+                vertices.push(Vector3::new(
+                    origin_world_x + offset_x + v.x,
+                    v.y,
+                    origin_world_z + offset_z + v.z,
+                ));
+            }
+
+            colors.extend_from_slice(&chunk_colors);
+        }
+    }
+
+    let batch_world_size = BATCH_SIZE as f32 * chunk_world_size;
+    let bbox = BoundingBox::new(
+        Vector3::new(origin_world_x, min_height, origin_world_z),
+        Vector3::new(
+            origin_world_x + batch_world_size,
+            max_height,
+            origin_world_z + batch_world_size,
+        ),
+    );
+
+    BatchData {
+        coord,
+        vertices,
+        colors,
+        bbox,
     }
 }

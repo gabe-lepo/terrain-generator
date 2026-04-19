@@ -1,5 +1,7 @@
 use raylib::prelude::*;
 
+use crate::config::USE_SINGLE_PLANET;
+
 #[derive(Clone)]
 pub enum PlanetType {
     Jungle,
@@ -35,20 +37,23 @@ pub struct PlanetConfig {
     pub freq_scale: f64,
     pub continent_freq: f64,
     pub water_threshold: f64,
-    pub warp_strength: f64,
     pub continent_slope: f64,
 }
 
 impl PlanetConfig {
     pub fn new(seed: u64) -> Self {
-        // let mut config = Self::volcanic_planet();
-        let mut config = match seed % 5 {
-            0 => Self::jungle_planet(),
-            1 => Self::arctic_planet(),
-            2 => Self::desert_planet(),
-            3 => Self::volcanic_planet(),
-            _ => Self::islands_planet(),
-        };
+        let mut config: PlanetConfig;
+        if USE_SINGLE_PLANET {
+            config = Self::jungle_planet();
+        } else {
+            config = match seed % 5 {
+                0 => Self::jungle_planet(),
+                1 => Self::arctic_planet(),
+                2 => Self::desert_planet(),
+                3 => Self::volcanic_planet(),
+                _ => Self::islands_planet(),
+            };
+        }
         config.seed = seed;
         config
     }
@@ -79,7 +84,6 @@ impl PlanetConfig {
             freq_scale: 0.007,
             continent_freq: 0.0005,
             water_threshold: 0.15,
-            warp_strength: 300.0,
             continent_slope: 1.2,
         }
     }
@@ -99,7 +103,6 @@ impl PlanetConfig {
             freq_scale: 0.005,
             continent_freq: 0.0005,
             water_threshold: -0.3,
-            warp_strength: 300.0,
             continent_slope: 1.5,
         }
     }
@@ -119,7 +122,6 @@ impl PlanetConfig {
             freq_scale: 0.006,
             continent_freq: 0.0003,
             water_threshold: -0.9,
-            warp_strength: 300.0,
             continent_slope: 0.3,
         }
     }
@@ -139,7 +141,6 @@ impl PlanetConfig {
             freq_scale: 0.01,
             continent_freq: 0.0005,
             water_threshold: 0.1,
-            warp_strength: 300.0,
             continent_slope: 0.8,
         }
     }
@@ -159,7 +160,6 @@ impl PlanetConfig {
             freq_scale: 0.0025,
             continent_freq: 0.002,
             water_threshold: 0.4,
-            warp_strength: 300.0,
             continent_slope: 1.5,
         }
     }

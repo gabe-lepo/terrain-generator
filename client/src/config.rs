@@ -13,23 +13,18 @@ pub const TIME_STARTING_HOUR: f32 = SUNRISE_START;
 pub const TIME_SPEED_20_MIN: f32 = 300.0;
 pub const TIME_SPEED_DEBUG: f32 = 3000.0;
 
-pub const AMBIENT_DAY: f32 = 0.35;
-pub const AMBIENT_NIGHT: f32 = 0.08;
-
 /// Hour thresholds for sun/sky transitions
 pub const SUNRISE_START: f32 = 5.0;
 pub const SUNRISE_END: f32 = 7.0;
 pub const SUNSET_START: f32 = 19.0;
 pub const SUNSET_END: f32 = 21.0;
 
-/// Sky colors at each phase
+/// Sky colors and tinting
 pub const SKY_COLOR_NIGHT: Color = Color::new(3, 3, 8, 255);
-pub const SKY_COLOR_SUNRISE: Color = Color::new(230, 102, 38, 255);
-pub const SKY_COLOR_DAY: Color = Color::new(102, 178, 255, 255);
-
-/// Biome specific sky color tint factors
 pub const SKY_SUNRISE_TINT: Color = Color::new(230, 100, 30, 255);
 pub const SKY_SUNRISE_TINT_STRENGTH: f32 = 0.6;
+pub const AMBIENT_DAY: f32 = 0.35;
+pub const AMBIENT_NIGHT: f32 = 0.08;
 
 /// Sun sizing
 pub const SUN_RADIUS: f32 = 1_000.0;
@@ -95,6 +90,9 @@ pub const CHUNK_SIZE: i32 = 16;
 /// World units per vertex in the heightmap
 /// WARN: BREAKS FOG DISTANCE CALCS IF CHANGED
 pub const TERRAIN_RESOLUTION: f32 = 10.0;
+
+/// Planet options
+pub const USE_SINGLE_PLANET: bool = true;
 
 // ============================================================================
 // RENDERING

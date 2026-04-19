@@ -1,6 +1,7 @@
 // WARN: Comment this after building out everything
-#![allow(dead_code, unused)]
+// #![allow(dead_code, unused)]
 mod chunk;
+mod chunk_batch;
 mod chunk_loader;
 mod config;
 mod network;
@@ -132,10 +133,10 @@ fn main() {
                 Color::DARKGRAY,
             );
             // Bar fill
-            let fill = ((WINDOW_WIDTH - 400) as f32 * progress * 2.0) as i32;
+            let fill = ((WINDOW_WIDTH - 400) as f32 * progress) as i32;
             d.draw_rectangle(200, WINDOW_HEIGHT / 2 - 10, fill, 20, Color::GREEN);
             d.draw_text(
-                &format!("Generating planet... {:.0}%", progress * 200.0),
+                &format!("Generating planet... {:.0}%", progress * 100.0),
                 200,
                 WINDOW_HEIGHT / 2 - 40,
                 24,

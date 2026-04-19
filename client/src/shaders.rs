@@ -184,7 +184,7 @@ impl ShaderManager {
         println!("  Fragment: {}", fs_path);
 
         let shader = rl.load_shader(thread, Some(&vs_path), Some(&fs_path));
-        println!("Terrain shader loaded (otherwise the underlying FFI would've crashed...)");
+        println!("Terrain shaders loaded");
 
         Some(shader)
     }

@@ -1,4 +1,5 @@
-use crate::chunk::{Chunk, ChunkCoord, sample_heightmap};
+use crate::chunk::{ChunkCoord, sample_heightmap};
+use crate::chunk_batch::{BATCH_SIZE, BatchCoord, ChunkBatch};
 use crate::chunk_loader::ChunkLoader;
 use crate::config::{
     CHUNK_SIZE, CONNECT, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT,
@@ -14,7 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 pub struct TerrainManager {
-    chunks: HashMap<ChunkCoord, Chunk>,
+    batches: HashMap<BatchCoord, ChunkBatch>,
+    pending_batches: HashSet<BatchCoord>,
     heightmaps: HashMap<ChunkCoord, Vec<Vec<f32>>>,
     preload_total: usize,
     preload_complete: bool,
@@ -23,7 +25,6 @@ pub struct TerrainManager {
     last_rendered_count: usize,
     pub planet: Arc<PlanetConfig>,
     chunk_loader: ChunkLoader,
-    pending_chunks: HashSet<ChunkCoord>,
     ready: bool,
     /// Cached count of valid chunks within VIEW_DISTANCE of `last_player_chunk`,
     /// accounting for planet grid boundary clamping. Invalidated to None whenever
@@ -48,7 +49,8 @@ impl TerrainManager {
         }
 
         Self {
-            chunks: HashMap::new(),
+            batches: HashMap::new(),
+            pending_batches: HashSet::new(),
             heightmaps: HashMap::new(),
             preload_total,
             preload_complete: false,
@@ -57,7 +59,6 @@ impl TerrainManager {
             last_rendered_count: 0,
             planet,
             chunk_loader,
-            pending_chunks: HashSet::new(),
             ready: false,
             initial_mesh_expected_cache: None,
         }
@@ -82,8 +83,8 @@ impl TerrainManager {
         self.noise = noise;
         self.planet = planet;
         self.chunk_loader = chunk_loader;
-        self.chunks.clear();
-        self.pending_chunks.clear();
+        self.batches.clear();
+        self.pending_batches.clear();
         self.last_player_chunk = None;
         self.heightmaps = HashMap::new();
         self.preload_total = preload_total;
@@ -92,7 +93,6 @@ impl TerrainManager {
         self.initial_mesh_expected_cache = None;
     }
 
-    /// Update which chunks are loaded based on player pos
     pub fn update(
         &mut self,
         player_pos: Vector3,
@@ -100,7 +100,7 @@ impl TerrainManager {
         thread: &RaylibThread,
         terrain_shader: Option<&Shader>,
     ) {
-        // Chunk preloader, block everything else until done
+        // Collect heightmaps until full planet preload is done
         if !self.preload_complete {
             while let Some(data) = self.chunk_loader.poll_completed() {
                 let coord = ChunkCoord::new(data.coord.0, data.coord.1);
@@ -110,30 +110,9 @@ impl TerrainManager {
             if self.heightmaps.len() >= self.preload_total {
                 self.preload_complete = true;
                 self.ready = true;
-
-                // Immediately queue mesh builds for initial view distance
-                let center = ChunkCoord::from_world_pos(player_pos.x, player_pos.z);
-                self.last_player_chunk = Some(center);
-                self.initial_mesh_expected_cache = None;
-                let grid = self.planet.grid_size as i32;
-                for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
-                    for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
-                        let cx = center.x + dx;
-                        let cz = center.z + dz;
-                        if cx < 0 || cz < 0 || cx >= grid || cz >= grid {
-                            continue;
-                        }
-                        let coord = ChunkCoord::new(cx, cz);
-                        if let Some(heightmap) = self.heightmaps.get(&coord) {
-                            self.chunk_loader
-                                .request_mesh_from_heightmap((cx, cz), heightmap.clone());
-                            self.pending_chunks.insert(coord);
-                        }
-                    }
-                }
+                // Batch requests will be submitted on first update pass below
             }
 
-            // Fall through to upload loop even during mesh phase
             if !self.preload_complete {
                 return;
             }
@@ -150,11 +129,10 @@ impl TerrainManager {
 
         // PERF:
         // Poll for completed chunks and upload to gpu
-        // - Cap chunk uploads per frame
-        // - Unless loading initial chunks, then no effective cap with max usize
+        // No cap during init upload, cap at 16/frame once steady
 
         let initial_load_complete =
-            self.chunks.len() >= (self.initial_mesh_expected() as f32 * 0.9) as usize;
+            self.batches.len() >= (self.initial_mesh_expected() as f32 * 0.9) as usize;
         let upload_cap = if initial_load_complete {
             16
         } else {
@@ -163,23 +141,22 @@ impl TerrainManager {
         let mut uploaded_this_frame = 0;
 
         while uploaded_this_frame < upload_cap {
-            if let Some(chunk_data) = self.chunk_loader.poll_completed() {
-                let coord = ChunkCoord::new(chunk_data.coord.0, chunk_data.coord.1);
+            if let Some(batch_data) = self.chunk_loader.poll_batch_completed() {
                 let shader = if RENDER_WIREFRAME {
                     None
                 } else {
                     terrain_shader
                 };
-                let chunk = Chunk::from_data(chunk_data, rl, thread, shader);
-                self.chunks.insert(coord, chunk);
-                self.pending_chunks.remove(&coord);
+                let batch = ChunkBatch::from_data(batch_data, rl, thread, shader);
+                self.pending_batches.remove(&batch.coord);
+                self.batches.insert(batch.coord, batch);
                 uploaded_this_frame += 1;
             } else {
                 break;
             }
         }
 
-        // Only update chunks if player moved to different chunk
+        // Only update batch requests if player moved to a different chunk
         if self.last_player_chunk == Some(current_chunk) {
             return;
         }
@@ -187,13 +164,9 @@ impl TerrainManager {
         self.last_player_chunk = Some(current_chunk);
         self.initial_mesh_expected_cache = None;
 
-        // Determine which chunks should load
-        let mut chunks_to_keep = std::collections::HashSet::new();
-
-        // Cap chunk load requests
-        let mut new_requests: Vec<(i32, ChunkCoord)> = Vec::new();
-
         let grid = self.planet.grid_size as i32;
+        let mut batches_to_keep: HashSet<BatchCoord> = HashSet::new();
+
         for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
             for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
                 let cx = current_chunk.x + dx;
@@ -204,44 +177,61 @@ impl TerrainManager {
                     continue;
                 }
 
-                let chunk_coord = ChunkCoord::new(cx, cz);
-                chunks_to_keep.insert(chunk_coord);
+                let batch_coord = BatchCoord::from_chunk_coord(cx, cz);
+                batches_to_keep.insert(batch_coord);
 
                 // Request which chunks should load
-                if !self.chunks.contains_key(&chunk_coord)
-                    && !self.pending_chunks.contains(&chunk_coord)
+                if self.batches.contains_key(&batch_coord)
+                    || self.pending_batches.contains(&batch_coord)
                 {
-                    let dist_sq = dx * dx + dz * dz;
-                    new_requests.push((dist_sq, chunk_coord));
+                    continue;
+                }
+
+                // Submit batch only when all 16 heightmaps are ready
+                let (ocx, ocz) = batch_coord.origin_chunk();
+                let all_ready = (0..BATCH_SIZE as i32).all(|ddz| {
+                    (0..BATCH_SIZE as i32).all(|ddx| {
+                        let hx = ocx + ddx;
+                        let hz = ocz + ddz;
+                        hx >= 0
+                            && hz >= 0
+                            && hx < grid
+                            && hz < grid
+                            && self.heightmaps.contains_key(&ChunkCoord::new(hx, hz))
+                    })
+                });
+
+                if all_ready {
+                    let mut heightmaps: Box<[[Vec<Vec<f32>>; BATCH_SIZE]; BATCH_SIZE]> =
+                        Box::new(std::array::from_fn(|_| std::array::from_fn(|_| vec![])));
+
+                    for ddz in 0..BATCH_SIZE {
+                        for ddx in 0..BATCH_SIZE {
+                            let hx = ocx + ddx as i32;
+                            let hz = ocz + ddz as i32;
+                            heightmaps[ddz][ddx] =
+                                self.heightmaps[&ChunkCoord::new(hx, hz)].clone();
+                        }
+                    }
+                    self.chunk_loader.request_batch(batch_coord, heightmaps);
+                    self.pending_batches.insert(batch_coord);
                 }
             }
         }
 
-        // Sort nearest to player before loading
-        new_requests.sort_unstable_by_key(|(d, _)| *d);
-
-        for (_, coord) in new_requests {
-            if self.heightmaps.contains_key(&coord) {
-                let heightmap = self.heightmaps[&coord].clone();
-                self.chunk_loader
-                    .request_mesh_from_heightmap((coord.x, coord.z), heightmap);
-            } else {
-                self.chunk_loader.request_chunk((coord.x, coord.z));
-            }
-            self.pending_chunks.insert(coord);
-        }
-
-        // Unload chunks outside view distance
-        self.chunks
-            .retain(|coord, _| chunks_to_keep.contains(coord));
-        self.pending_chunks
-            .retain(|coord| chunks_to_keep.contains(coord));
+        self.batches
+            .retain(|coord, _| batches_to_keep.contains(coord));
+        self.pending_batches
+            .retain(|coord| batches_to_keep.contains(coord));
     }
 
     /// Preload statuses
     pub fn preload_progress(&mut self) -> f32 {
         if !self.preload_complete {
             return self.heightmaps.len() as f32 / self.preload_total as f32 * 0.5;
+        }
+        if self.last_player_chunk.is_none() {
+            return 0.5;
         }
         let expected = self.initial_mesh_expected();
         if expected == 0 {
@@ -250,9 +240,13 @@ impl TerrainManager {
 
         // Pending chunks are in-flight, chunks are uploaded
         // together they represent total progress toward expected
-        let done = self.chunks.len();
-        let in_flight = self.pending_chunks.len();
+        let done = self.batches.len();
+        let in_flight = self.pending_batches.len();
         let mesh_progress = ((done + in_flight) as f32 / expected as f32).min(1.0);
+        // println!(
+        //     "progress: done={} in-flight={} expected={}",
+        //     done, in_flight, expected
+        // );
         0.5 + mesh_progress * 0.5
     }
 
@@ -261,7 +255,7 @@ impl TerrainManager {
             return false;
         }
         let expected = self.initial_mesh_expected();
-        self.chunks.len() >= (expected as f32 * 0.9) as usize
+        self.batches.len() >= (expected as f32 * 0.9) as usize
     }
 
     pub fn render(
@@ -278,7 +272,7 @@ impl TerrainManager {
         shader_manager.update_terrain_shader(camera, fog_config, sun_config);
 
         // Render chunks
-        for chunk in self.chunks.values() {
+        for chunk in self.batches.values() {
             if Self::is_chunk_potentially_visible(camera, chunk) {
                 chunk.render(d, RENDER_WIREFRAME);
                 rendered_count += 1;
@@ -289,7 +283,7 @@ impl TerrainManager {
     }
 
     pub fn chunk_count(&self) -> usize {
-        self.chunks.len()
+        self.batches.len()
     }
 
     pub fn rendered_chunk_count(&self) -> usize {
@@ -310,11 +304,11 @@ impl TerrainManager {
         ChunkLoader::get_height(x, z, &self.noise, &self.planet)
     }
 
-    fn is_chunk_potentially_visible(camera: &Camera3D, chunk: &Chunk) -> bool {
+    fn is_chunk_potentially_visible(camera: &Camera3D, chunk: &ChunkBatch) -> bool {
         // Debugging - kill frustum culling
         // return true;
 
-        let bbox = &chunk.bounding_box;
+        let bbox = &chunk.bbox;
         // Camera forward direction
         let forward = Vector3::new(
             camera.target.x - camera.position.x,
@@ -367,18 +361,19 @@ impl TerrainManager {
             None => return 1, // Avoid division by zero before first update
         };
         let grid = self.planet.grid_size as i32;
-        let mut count = 0;
+        let mut batch_coords: HashSet<BatchCoord> = HashSet::new();
         for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
             for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
                 let cx = center.x + dx;
                 let cz = center.z + dz;
                 if cx >= 0 && cz >= 0 && cx < grid && cz < grid {
-                    count += 1;
+                    batch_coords.insert(BatchCoord::from_chunk_coord(cx, cz));
                 }
             }
         }
-        self.initial_mesh_expected_cache = Some(count);
-        count
+        let result = batch_coords.len();
+        self.initial_mesh_expected_cache = Some(result);
+        result
     }
 }
 
@@ -393,20 +388,10 @@ impl WorldQuery for TerrainManager {
             return self.planet.base_height;
         }
 
-        // If chunk is loaded, used cached heightmap
-        // Otherwise calc directly from noise
-        if let Some(chunk) = self.chunks.get(&chunk_coord) {
-            // Convert world pos to local chunk coord
+        if let Some(heightmap) = self.heightmaps.get(&chunk_coord) {
             let (chunk_world_x, chunk_world_z) = chunk_coord.get_world_pos();
             let local_x = x - chunk_world_x;
             let local_z = z - chunk_world_z;
-
-            chunk.get_height_at(local_x, local_z)
-        } else if let Some(heightmap) = self.heightmaps.get(&chunk_coord) {
-            let (chunk_world_x, chunk_world_z) = chunk_coord.get_world_pos();
-            let local_x = x - chunk_world_x;
-            let local_z = z - chunk_world_z;
-
             sample_heightmap(heightmap, local_x, local_z)
         } else {
             // Chunk not loaded, calc from noise
