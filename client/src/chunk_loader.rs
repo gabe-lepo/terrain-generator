@@ -153,6 +153,7 @@ impl ChunkLoader {
         // Continental masking using original coords
         let continent = ShapingContext::continent_mask(xf, zf, &ctx);
         if continent < planet.water_threshold {
+            // TODO: Move this *50 to planet config
             let depth = (continent - planet.water_threshold) * 50.0;
             return (planet.base_height as f64 + depth) as f32;
         }

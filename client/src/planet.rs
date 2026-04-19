@@ -50,7 +50,7 @@ impl PlanetConfig {
     pub fn new(seed: u64) -> Self {
         let mut config: PlanetConfig;
         if USE_SINGLE_PLANET {
-            config = Self::islands_planet();
+            config = Self::arctic_planet();
         } else {
             config = match seed % 5 {
                 0 => Self::jungle_planet(),
@@ -89,7 +89,7 @@ impl PlanetConfig {
             lacunarity: 2.0,
             freq_scale: 0.007,
             continent_freq: 0.0005,
-            water_threshold: 0.15,
+            water_threshold: -0.9,
             continent_slope: 1.2,
             use_ridged: false,
             use_domain_warp: false,
@@ -106,15 +106,15 @@ impl PlanetConfig {
             planet_type: PlanetType::Arctic,
             bands: ARCTIC_BANDS.to_vec(),
             sky_color: Color::new(160, 210, 240, 255),
-            height_scale: 140.0,
-            base_height: 0.0,
+            height_scale: 250.0,
+            base_height: -30.0,
             octaves: 4,
-            persistence: 0.45,
+            persistence: 0.38,
             lacunarity: 2.0,
             freq_scale: 0.005,
             continent_freq: 0.0005,
-            water_threshold: -0.3,
-            continent_slope: 1.5,
+            water_threshold: -5.0,
+            continent_slope: 10.0,
             use_ridged: true,
             use_domain_warp: false,
             warp_strength: 0.0,
@@ -209,12 +209,12 @@ static JUNGLE_BANDS: &[HeightBand] = &[
 
 #[rustfmt::skip]
 static ARCTIC_BANDS: &[HeightBand] = &[
-    HeightBand {max_y: 0.0, color: Color::new(30, 60, 120, 255)},
-    HeightBand {max_y: 10.0, color: Color::new(160, 185, 210, 255)},
-    HeightBand {max_y: 40.0, color: Color::new(210, 220, 230, 255)},
-    HeightBand {max_y: 80.0, color: Color::new(230, 235, 240, 255)},
-    HeightBand {max_y: 120.0, color: Color::new(245, 248, 255, 255)},
-    HeightBand {max_y: 140.0, color: Color::new(255, 255, 255, 255)},
+    HeightBand {max_y: -20.0, color: Color::new(25, 45, 75, 255)},
+    HeightBand {max_y: 5.0, color: Color::new(140, 160, 175, 255)},
+    HeightBand {max_y: 40.0, color: Color::new(95, 100, 105,255)},
+    HeightBand {max_y: 90.0, color: Color::new(185, 195, 205, 255)},
+    HeightBand {max_y: 160.0, color: Color::new(200, 208, 215, 255)},
+    HeightBand {max_y: 250.0, color: Color::new(215, 218, 218, 255)},
 ];
 
 #[rustfmt::skip]
