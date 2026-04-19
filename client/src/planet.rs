@@ -44,7 +44,7 @@ impl PlanetConfig {
     pub fn new(seed: u64) -> Self {
         let mut config: PlanetConfig;
         if USE_SINGLE_PLANET {
-            config = Self::jungle_planet();
+            config = Self::volcanic_planet();
         } else {
             config = match seed % 5 {
                 0 => Self::jungle_planet(),

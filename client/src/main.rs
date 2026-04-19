@@ -1,5 +1,5 @@
 // WARN: Comment this after building out everything
-// #![allow(dead_code, unused)]
+#![allow(dead_code, unused)]
 mod chunk;
 mod chunk_batch;
 mod chunk_loader;

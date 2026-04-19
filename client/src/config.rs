@@ -45,7 +45,7 @@ pub const WINDOW_HEIGHT: i32 = 1440;
 // ============================================================================
 
 /// God mode or not (flying, higher speed, no collision)
-pub const GOD_MODE: bool = false;
+pub const GOD_MODE: bool = true;
 
 /// Player move speed
 pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 50.0 };
@@ -124,3 +124,12 @@ pub const FAR_CLIP_PLANE_DISTANCE: f32 =
 
 /// How many chunks to load in each direction from player
 pub const VIEW_DISTANCE: i32 = 150;
+
+/// Level of detail - Full resolution
+pub const LOD0_BATCH_RADIUS: i32 = 5;
+
+/// Level of detail - Half resolution
+pub const LOD1_BATCH_RADIUS: i32 = 10;
+
+/// Level of detail - Quarter resolution
+pub const LOD2_BATCH_RADIUS: i32 = 15;

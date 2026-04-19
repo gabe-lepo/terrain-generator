@@ -3,9 +3,11 @@ use crate::chunk_batch::{BATCH_SIZE, BatchCoord, ChunkBatch};
 use crate::chunk_loader::ChunkLoader;
 use crate::config::{
     CHUNK_SIZE, CONNECT, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT,
-    MAX_DISTANCE_BUFFER, RENDER_WIREFRAME, VIEW_DISTANCE,
+    LOD0_BATCH_RADIUS, LOD1_BATCH_RADIUS, LOD2_BATCH_RADIUS, MAX_DISTANCE_BUFFER, RENDER_WIREFRAME,
+    VIEW_DISTANCE,
 };
 use crate::planet::PlanetConfig;
+use crate::player;
 use crate::shaders::{FogConfig, ShaderManager, SunConfig};
 use crate::world::WorldQuery;
 
@@ -125,11 +127,13 @@ impl TerrainManager {
             return;
         }
 
+        // Set last player chunk before any expected count calcs
         let current_chunk = ChunkCoord::from_world_pos(player_pos.x, player_pos.z);
-
-        // PERF:
-        // Poll for completed chunks and upload to gpu
-        // No cap during init upload, cap at 16/frame once steady
+        let player_moved = self.last_player_chunk != Some(current_chunk);
+        if player_moved {
+            self.last_player_chunk = Some(current_chunk);
+            self.initial_mesh_expected_cache = None;
+        }
 
         let initial_load_complete =
             self.batches.len() >= (self.initial_mesh_expected() as f32 * 0.9) as usize;
@@ -157,12 +161,9 @@ impl TerrainManager {
         }
 
         // Only update batch requests if player moved to a different chunk
-        if self.last_player_chunk == Some(current_chunk) {
+        if !player_moved {
             return;
         }
-
-        self.last_player_chunk = Some(current_chunk);
-        self.initial_mesh_expected_cache = None;
 
         let grid = self.planet.grid_size as i32;
         let mut batches_to_keep: HashSet<BatchCoord> = HashSet::new();
@@ -205,6 +206,21 @@ impl TerrainManager {
                     let mut heightmaps: Box<[[Vec<Vec<f32>>; BATCH_SIZE]; BATCH_SIZE]> =
                         Box::new(std::array::from_fn(|_| std::array::from_fn(|_| vec![])));
 
+                    // Compute batch distance in batch units from player batch
+                    let player_batch =
+                        BatchCoord::from_chunk_coord(current_chunk.x, current_chunk.z);
+                    let dbx = (batch_coord.gx - player_batch.gx).abs();
+                    let dbz = (batch_coord.gz - player_batch.gz).abs();
+                    let batch_dist = dbx.max(dbz);
+
+                    let lod = if batch_dist <= LOD0_BATCH_RADIUS {
+                        0
+                    } else if batch_dist <= LOD1_BATCH_RADIUS {
+                        1
+                    } else {
+                        2
+                    };
+
                     for ddz in 0..BATCH_SIZE {
                         for ddx in 0..BATCH_SIZE {
                             let hx = ocx + ddx as i32;
@@ -213,7 +229,10 @@ impl TerrainManager {
                                 self.heightmaps[&ChunkCoord::new(hx, hz)].clone();
                         }
                     }
-                    self.chunk_loader.request_batch(batch_coord, heightmaps);
+
+                    // Assemble the heightmaps
+                    self.chunk_loader
+                        .request_batch(batch_coord, heightmaps, lod);
                     self.pending_batches.insert(batch_coord);
                 }
             }
@@ -349,9 +368,9 @@ impl TerrainManager {
         dot > -radius && distance < max_distance + radius
     }
 
-    /// Count valid chunks within VIEW_DISTANCE of `last_player_chunk`,
-    /// accounting for planet grid boundary clamping. Cached across calls and
-    /// only recomputed after cache invalidation (center move or reinit).
+    /// Need to know initial expected for loading screen
+    // WARN: Every time i update/optimize the loading pipeline this
+    // logic needs to also be updated!!!
     fn initial_mesh_expected(&mut self) -> usize {
         if let Some(cached) = self.initial_mesh_expected_cache {
             return cached;
@@ -361,13 +380,21 @@ impl TerrainManager {
             None => return 1, // Avoid division by zero before first update
         };
         let grid = self.planet.grid_size as i32;
+
+        let player_batch = BatchCoord::from_chunk_coord(center.x, center.z);
+        let radius_chunks = LOD2_BATCH_RADIUS * BATCH_SIZE as i32;
         let mut batch_coords: HashSet<BatchCoord> = HashSet::new();
-        for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
-            for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
+        for dx in -radius_chunks..=radius_chunks {
+            for dz in -radius_chunks..=radius_chunks {
                 let cx = center.x + dx;
                 let cz = center.z + dz;
                 if cx >= 0 && cz >= 0 && cx < grid && cz < grid {
-                    batch_coords.insert(BatchCoord::from_chunk_coord(cx, cz));
+                    let batch_coord = BatchCoord::from_chunk_coord(cx, cz);
+                    let dbx = (batch_coord.gx - player_batch.gx).abs();
+                    let dbz = (batch_coord.gz - player_batch.gz).abs();
+                    if dbx.max(dbz) <= LOD2_BATCH_RADIUS {
+                        batch_coords.insert(batch_coord);
+                    }
                 }
             }
         }
