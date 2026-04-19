@@ -126,10 +126,10 @@ pub const FAR_CLIP_PLANE_DISTANCE: f32 =
 pub const VIEW_DISTANCE: i32 = 150;
 
 /// Level of detail - Full resolution
-pub const LOD0_BATCH_RADIUS: i32 = 5;
+pub const LOD0_BATCH_RADIUS: i32 = 4;
 
 /// Level of detail - Half resolution
-pub const LOD1_BATCH_RADIUS: i32 = 10;
+pub const LOD1_BATCH_RADIUS: i32 = 6;
 
 /// Level of detail - Quarter resolution
-pub const LOD2_BATCH_RADIUS: i32 = 15;
+pub const LOD2_BATCH_RADIUS: i32 = 7;

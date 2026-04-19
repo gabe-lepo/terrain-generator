@@ -18,7 +18,8 @@ use std::sync::Arc;
 
 pub struct TerrainManager {
     batches: HashMap<BatchCoord, ChunkBatch>,
-    pending_batches: HashSet<BatchCoord>,
+    upgrading_lod: HashMap<BatchCoord, ChunkBatch>,
+    pending_batches: HashMap<BatchCoord, usize>,
     heightmaps: HashMap<ChunkCoord, Vec<Vec<f32>>>,
     preload_total: usize,
     preload_complete: bool,
@@ -28,9 +29,6 @@ pub struct TerrainManager {
     pub planet: Arc<PlanetConfig>,
     chunk_loader: ChunkLoader,
     ready: bool,
-    /// Cached count of valid chunks within VIEW_DISTANCE of `last_player_chunk`,
-    /// accounting for planet grid boundary clamping. Invalidated to None whenever
-    /// `last_player_chunk` or `planet.grid_size` changes.
     initial_mesh_expected_cache: Option<usize>,
 }
 
@@ -52,7 +50,8 @@ impl TerrainManager {
 
         Self {
             batches: HashMap::new(),
-            pending_batches: HashSet::new(),
+            upgrading_lod: HashMap::new(),
+            pending_batches: HashMap::new(),
             heightmaps: HashMap::new(),
             preload_total,
             preload_complete: false,
@@ -86,6 +85,7 @@ impl TerrainManager {
         self.planet = planet;
         self.chunk_loader = chunk_loader;
         self.batches.clear();
+        self.upgrading_lod.clear();
         self.pending_batches.clear();
         self.last_player_chunk = None;
         self.heightmaps = HashMap::new();
@@ -153,6 +153,7 @@ impl TerrainManager {
                 };
                 let batch = ChunkBatch::from_data(batch_data, rl, thread, shader);
                 self.pending_batches.remove(&batch.coord);
+                self.upgrading_lod.remove(&batch.coord);
                 self.batches.insert(batch.coord, batch);
                 uploaded_this_frame += 1;
             } else {
@@ -181,14 +182,39 @@ impl TerrainManager {
                 let batch_coord = BatchCoord::from_chunk_coord(cx, cz);
                 batches_to_keep.insert(batch_coord);
 
-                // Request which chunks should load
-                if self.batches.contains_key(&batch_coord)
-                    || self.pending_batches.contains(&batch_coord)
-                {
-                    continue;
+                let player_batch = BatchCoord::from_chunk_coord(current_chunk.x, current_chunk.z);
+                let dbx = (batch_coord.gx - player_batch.gx).abs();
+                let dbz = (batch_coord.gz - player_batch.gz).abs();
+                let batch_dist = dbx.max(dbz);
+                let required_lod = if batch_dist <= LOD0_BATCH_RADIUS {
+                    0
+                } else if batch_dist <= LOD1_BATCH_RADIUS {
+                    1
+                } else {
+                    2
+                };
+
+                // Skip if already rendered at correct lod
+                if let Some(batch) = self.batches.get(&batch_coord) {
+                    if batch.lod == required_lod {
+                        continue;
+                    }
+                    // LOD needs to be upgraded or downgraded as player moves
+                    if let Some(old) = self.batches.remove(&batch_coord) {
+                        self.upgrading_lod.insert(batch_coord, old);
+                    }
                 }
 
-                // Submit batch only when all 16 heightmaps are ready
+                // Skip if already pending at correct LOD
+                if let Some(&pending_lod) = self.pending_batches.get(&batch_coord) {
+                    if pending_lod == required_lod {
+                        continue;
+                    }
+                    // Pending at wrong LOD - cancel it
+                    self.pending_batches.remove(&batch_coord);
+                }
+
+                // Submit batch only when all heightmaps are ready
                 let (ocx, ocz) = batch_coord.origin_chunk();
                 let all_ready = (0..BATCH_SIZE as i32).all(|ddz| {
                     (0..BATCH_SIZE as i32).all(|ddx| {
@@ -206,21 +232,6 @@ impl TerrainManager {
                     let mut heightmaps: Box<[[Vec<Vec<f32>>; BATCH_SIZE]; BATCH_SIZE]> =
                         Box::new(std::array::from_fn(|_| std::array::from_fn(|_| vec![])));
 
-                    // Compute batch distance in batch units from player batch
-                    let player_batch =
-                        BatchCoord::from_chunk_coord(current_chunk.x, current_chunk.z);
-                    let dbx = (batch_coord.gx - player_batch.gx).abs();
-                    let dbz = (batch_coord.gz - player_batch.gz).abs();
-                    let batch_dist = dbx.max(dbz);
-
-                    let lod = if batch_dist <= LOD0_BATCH_RADIUS {
-                        0
-                    } else if batch_dist <= LOD1_BATCH_RADIUS {
-                        1
-                    } else {
-                        2
-                    };
-
                     for ddz in 0..BATCH_SIZE {
                         for ddx in 0..BATCH_SIZE {
                             let hx = ocx + ddx as i32;
@@ -232,8 +243,8 @@ impl TerrainManager {
 
                     // Assemble the heightmaps
                     self.chunk_loader
-                        .request_batch(batch_coord, heightmaps, lod);
-                    self.pending_batches.insert(batch_coord);
+                        .request_batch(batch_coord, heightmaps, required_lod);
+                    self.pending_batches.insert(batch_coord, required_lod);
                 }
             }
         }
@@ -241,7 +252,9 @@ impl TerrainManager {
         self.batches
             .retain(|coord, _| batches_to_keep.contains(coord));
         self.pending_batches
-            .retain(|coord| batches_to_keep.contains(coord));
+            .retain(|coord, _| batches_to_keep.contains(coord));
+        self.upgrading_lod
+            .retain(|coord, _| batches_to_keep.contains(coord));
     }
 
     /// Preload statuses
@@ -295,6 +308,15 @@ impl TerrainManager {
             if Self::is_chunk_potentially_visible(camera, chunk) {
                 chunk.render(d, RENDER_WIREFRAME);
                 rendered_count += 1;
+            }
+        }
+
+        // Overlap upgraded lod chunks
+        for (coord, chunk) in &self.upgrading_lod {
+            if !self.batches.contains_key(coord)
+                && Self::is_chunk_potentially_visible(camera, chunk)
+            {
+                chunk.render(d, RENDER_WIREFRAME);
             }
         }
 

@@ -29,6 +29,7 @@ pub struct ChunkBatch {
     pub coord: BatchCoord,
     model: Model,
     pub bbox: BoundingBox,
+    pub lod: usize,
 }
 
 impl ChunkBatch {
@@ -102,6 +103,7 @@ impl ChunkBatch {
             coord,
             model,
             bbox: data.bbox,
+            lod: data.lod,
         }
     }
 
