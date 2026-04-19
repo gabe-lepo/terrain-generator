@@ -202,13 +202,13 @@ impl TerrainManager {
         }
 
         // Block until seed is available (either server seed or offline default)
-        // NOTE: Its very likely the seed is available once the chunks are preloaded
+        // NOTE: Its very likely the seed is available once preload is complete
         // might be able to remove this
         if !self.ready {
             return;
         }
 
-        // Set last player chunk before any expected count calcs
+        // Only update if player has moved
         let current_chunk = ChunkCoord::from_world_pos(player_pos.x, player_pos.z);
         let player_moved = self.last_player_chunk != Some(current_chunk);
         if player_moved {
@@ -216,8 +216,11 @@ impl TerrainManager {
             self.initial_mesh_expected_cache = None;
         }
 
+        // Have we finished the initial mesh generation for expected close-to-player chunks?
         let initial_load_complete =
             self.batches.len() >= (self.initial_mesh_expected() as f32 * 0.9) as usize;
+
+        // Cap chunk uploads per frame
         let upload_cap = if initial_load_complete {
             16
         } else {
@@ -243,6 +246,8 @@ impl TerrainManager {
         }
 
         // Only update batch requests if player moved to a different chunk
+        // WARN: This must be checked _after_ the per frame upload cap!
+        // Otherwise preload progress is stuck at 100%
         if !player_moved {
             return;
         }
@@ -250,6 +255,7 @@ impl TerrainManager {
         let grid = self.planet.grid_size as i32;
         let mut batches_to_keep: HashSet<BatchCoord> = HashSet::new();
 
+        // Process chunk batches -- LOD determination,
         for dx in -VIEW_DISTANCE..=VIEW_DISTANCE {
             for dz in -VIEW_DISTANCE..=VIEW_DISTANCE {
                 let cx = current_chunk.x + dx;
@@ -263,6 +269,9 @@ impl TerrainManager {
                 let batch_coord = BatchCoord::from_chunk_coord(cx, cz);
                 batches_to_keep.insert(batch_coord);
 
+                // PERF:
+                // Figure out required LOD given the chunk distance from player
+                // Lower LOD at further distances
                 let player_batch = BatchCoord::from_chunk_coord(current_chunk.x, current_chunk.z);
                 let dbx = (batch_coord.gx - player_batch.gx).abs();
                 let dbz = (batch_coord.gz - player_batch.gz).abs();
@@ -275,12 +284,13 @@ impl TerrainManager {
                     2
                 };
 
-                // Skip if already rendered at correct lod
                 if let Some(batch) = self.batches.get(&batch_coord) {
+                    // Skip if already rendered at correct lod
                     if batch.lod == required_lod {
                         continue;
                     }
-                    // LOD needs to be upgraded or downgraded as player moves
+
+                    // Otherwise, LOD needs to be upgraded or downgraded
                     if let Some(old) = self.batches.remove(&batch_coord) {
                         self.upgrading_lod.insert(batch_coord, old);
                     }
@@ -291,7 +301,7 @@ impl TerrainManager {
                     if pending_lod == required_lod {
                         continue;
                     }
-                    // Pending at wrong LOD - cancel it
+                    // Pending at wrong LOD - evict it
                     self.pending_batches.remove(&batch_coord);
                 }
 
@@ -330,6 +340,7 @@ impl TerrainManager {
             }
         }
 
+        // Batch queues, pending to be rendered, batches that need LOD change, etc
         self.batches
             .retain(|coord, _| batches_to_keep.contains(coord));
         self.pending_batches

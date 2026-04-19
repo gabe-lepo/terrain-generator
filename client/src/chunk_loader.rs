@@ -1,6 +1,7 @@
 use crate::chunk_batch::{BATCH_SIZE, BatchCoord};
-use crate::config::*;
 use crate::planet::{HeightBand, PlanetConfig};
+use crate::terrain_shaper::*;
+use crate::{config::*, planet};
 
 use noise::{NoiseFn, Perlin};
 use raylib::prelude::*;
@@ -135,63 +136,53 @@ impl ChunkLoader {
     /// NOTE: This is the main terrain "shaping" function
     /// TODO: Caves? How to have multiple y values per x,z
     pub fn get_height(x: f32, z: f32, noise: &Perlin, planet: &PlanetConfig) -> f32 {
+        // Define shaping context
+        let seed_offset = (planet.seed.wrapping_mul(2654435761) % 100_000) as f64;
+        let continent_offset = (planet.seed.wrapping_mul(1234567891) % 100_000) as f64;
+        let ctx = ShapingContext::new(noise, planet, seed_offset, continent_offset);
+
         // Return water level outside planet boundary
         let world_size = planet.grid_size as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
         if x < 0.0 || z < 0.0 || x >= world_size || z >= world_size {
             return planet.base_height;
         }
 
-        let seed_offset = (planet.seed.wrapping_mul(2654435761) % 100_000) as f64;
-        let continent_offset = (planet.seed.wrapping_mul(1234567891) % 100_000) as f64;
+        let xf = x as f64;
+        let zf = z as f64;
 
-        // Continental masking
-        let cx = x as f64 * planet.continent_freq + continent_offset;
-        let cz = z as f64 * planet.continent_freq + continent_offset;
-        let continent = noise.get([cx, cz]);
+        // Continental masking using original coords
+        let continent = ShapingContext::continent_mask(xf, zf, &ctx);
         if continent < planet.water_threshold {
             let depth = (continent - planet.water_threshold) * 50.0;
             return (planet.base_height as f64 + depth) as f32;
         }
 
-        // NOTE: This doesnt work well... makes landmasses less-unique
-        // Domain warping
-        // let warp_freq = planet.freq_scale * 2.0;
-        // let warp_x = noise.get([
-        //     x as f64 * warp_freq + seed_offset + 1.7,
-        //     z as f64 * warp_freq + seed_offset + 9.2,
-        // ]);
-        // let warp_z = noise.get([
-        //     x as f64 * warp_freq + seed_offset + 8.3,
-        //     z as f64 * warp_freq + seed_offset + 2.8,
-        // ]);
+        // Optionally warp coords for detail sampling
+        let (sx, sz) = if planet.use_domain_warp {
+            ShapingContext::domain_warp(xf, zf, &ctx)
+        } else {
+            (xf, zf)
+        };
 
-        // Noise detail loop
-        let mut total = 0.0_f64;
-        let mut amplitude = 1.0_f64;
-        let mut frequency = planet.freq_scale;
-        let mut max_value = 0.0_f64;
+        // Detail noise
+        let raw = ShapingContext::fbm(sx, sz, &ctx, planet.use_ridged);
 
-        for _ in 0..planet.octaves {
-            let nx = (x as f64) * frequency + seed_offset;
-            let nz = (z as f64) * frequency + seed_offset;
-            // let nx = (x as f64 + warp_x * planet.warp_strength) * frequency + seed_offset;
-            // let nz = (z as f64 + warp_z * planet.warp_strength) * frequency + seed_offset;
-            total += noise.get([nx, nz]) * amplitude;
-            max_value += amplitude;
-            amplitude *= planet.persistence as f64;
-            frequency *= planet.lacunarity;
-        }
+        // Remap [-1,1] -> [0,1] for plateau curving
+        let normalized = (raw + 1.0) / 2.0;
+        let shaped = ShapingContext::apply_plateau_curve(normalized, planet.plateau_strength);
 
-        let normalized = total / max_value;
-        // Scale land height by how far above water thresh we are
-        let continent_factor = ((continent - planet.water_threshold)
-            / (1.0 - planet.water_threshold))
-            .clamp(0.0, 1.0)
-            .powf(planet.continent_slope);
-        let land_height =
-            ((normalized + 1.0) / 2.0) * planet.height_scale as f64 * continent_factor;
+        // Erosion scales height regionally
+        let erosion = if planet.use_erosion {
+            let e = ShapingContext::erosion_mask(sx, sz, &ctx);
+            if planet.use_ridged { 1.0 - e * 0.5 } else { e }
+        } else {
+            1.0
+        };
 
-        (planet.base_height as f64 + land_height) as f32
+        let land_height = shaped * planet.height_scale as f64 * erosion;
+        let final_height = ShapingContext::apply_continent_factor(land_height, continent, &ctx);
+
+        (planet.base_height as f64 + final_height) as f32
     }
 }
 

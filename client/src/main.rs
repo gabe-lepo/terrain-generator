@@ -10,6 +10,7 @@ mod player;
 mod remote_player;
 mod shaders;
 mod terrain_manager;
+mod terrain_shaper;
 mod time_of_day;
 mod utils;
 mod world;
@@ -79,7 +80,10 @@ fn main() {
 
     // Main loop
     while !rl_handle.window_should_close() {
+        let dt = rl_handle.get_frame_time();
+
         // Process network events
+        // NOTE: Ignoring result errors from try_recv
         while let Ok(event) = network_events.try_recv() {
             match event {
                 NetworkEvent::Connected => {
@@ -147,8 +151,6 @@ fn main() {
             );
             continue;
         }
-
-        let dt = rl_handle.get_frame_time();
 
         // Advance time
         time_of_day.advance(dt, TIME_SPEED_20_MIN);
