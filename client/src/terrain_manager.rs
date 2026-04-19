@@ -1,10 +1,10 @@
-use crate::chunk::{ChunkCoord, sample_heightmap};
+use crate::chunk::{self, ChunkCoord, sample_heightmap};
 use crate::chunk_batch::{BATCH_SIZE, BatchCoord, ChunkBatch};
 use crate::chunk_loader::ChunkLoader;
 use crate::config::{
     CHUNK_SIZE, CONNECT, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT,
-    LOD0_BATCH_RADIUS, LOD1_BATCH_RADIUS, LOD2_BATCH_RADIUS, MAX_DISTANCE_BUFFER, RENDER_WIREFRAME,
-    VIEW_DISTANCE,
+    LOD0_BATCH_RADIUS, LOD1_BATCH_RADIUS, LOD2_BATCH_RADIUS, MAX_DISTANCE_BUFFER,
+    PLAYER_FOV_DEGREES, RENDER_WIREFRAME, VIEW_DISTANCE,
 };
 use crate::planet::PlanetConfig;
 use crate::player;
@@ -15,6 +15,87 @@ use noise::Perlin;
 use raylib::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+pub struct Frustum {
+    // [a, b, c, d] per plane (ax+by+cz+d) >= 0 means inside view
+    planes: [[f32; 4]; 6],
+}
+
+impl Frustum {
+    fn from_camera(camera: &Camera3D, aspect_ratio: f32) -> Self {
+        let pos = camera.position;
+        let fwd = (camera.target - pos).normalized();
+        let right = fwd.cross(camera.up).normalized();
+        let up = right.cross(fwd).normalized();
+
+        let half_v = (PLAYER_FOV_DEGREES.to_radians() * 0.5).tan();
+        let half_h = half_v * aspect_ratio;
+
+        // Each side plane normal points inward.
+        // Near/far are planes perpendicular to fwd.
+        let near_normal = fwd;
+        let far_normal = Vector3::new(-fwd.x, -fwd.y, -fwd.z);
+
+        // Right plane: rotate fwd left by half_h angle -> normal points left (inward)
+        // Normal = -right*cos + fwd*sin  ... easier: cross product of edge direction with up
+        // Top plane normal: (fwd - up*half_v).cross(right) normalized, pointing inward
+        let left_normal = (fwd - right * half_h).cross(up).normalized();
+        let right_normal = up.cross((fwd + right * half_h)).normalized();
+        let bottom_normal = right.cross((fwd - up * half_v)).normalized();
+        let top_normal = (fwd + up * half_v).cross(right).normalized();
+
+        let make_plane = |n: Vector3| -> [f32; 4] {
+            // plane: n.dot(p - pos) >= 0  =>  n.dot(p) - n.dot(pos) >= 0
+            // so d = -n.dot(pos)
+            let d = -(n.x * pos.x + n.y * pos.y + n.z * pos.z);
+            [n.x, n.y, n.z, d]
+        };
+
+        let near_d = FAR_CLIP_PLANE_DISTANCE * 0.0
+            - (near_normal.x * pos.x + near_normal.y * pos.y + near_normal.z * pos.z);
+        // near plane passes through pos + fwd*near_dist, far through pos + fwd*far_dist
+        let near_pt = Vector3::new(
+            pos.x + fwd.x * 0.01,
+            pos.y + fwd.y * 0.01,
+            pos.z + fwd.z * 0.01,
+        );
+        let far_pt = Vector3::new(
+            pos.x + fwd.x * FAR_CLIP_PLANE_DISTANCE,
+            pos.y + fwd.y * FAR_CLIP_PLANE_DISTANCE,
+            pos.z + fwd.z * FAR_CLIP_PLANE_DISTANCE,
+        );
+
+        let make_plane_through = |n: Vector3, pt: Vector3| -> [f32; 4] {
+            let d = -(n.x * pt.x + n.y * pt.y + n.z * pt.z);
+            [n.x, n.y, n.z, d]
+        };
+
+        Self {
+            planes: [
+                make_plane(left_normal),
+                make_plane(right_normal),
+                make_plane(bottom_normal),
+                make_plane(top_normal),
+                make_plane_through(near_normal, near_pt),
+                make_plane_through(far_normal, far_pt),
+            ],
+        }
+    }
+
+    fn contains_aabb(&self, min: Vector3, max: Vector3) -> bool {
+        for plane in &self.planes {
+            let [a, b, c, d] = *plane;
+            // Positive vertex: pick the corner most in direction of the plane normal
+            let px = if a >= 0.0 { max.x } else { min.x };
+            let py = if b >= 0.0 { max.y } else { min.y };
+            let pz = if c >= 0.0 { max.z } else { min.z };
+            if a * px + b * py + c * pz + d < 0.0 {
+                return false; // AABB fully outside plane
+            }
+        }
+        true
+    }
+}
 
 pub struct TerrainManager {
     batches: HashMap<BatchCoord, ChunkBatch>,
@@ -294,10 +375,12 @@ impl TerrainManager {
         &mut self,
         d: &mut RaylibMode3D<RaylibDrawHandle>,
         camera: &Camera3D,
+        aspect_ratio: f32,
         shader_manager: &ShaderManager,
         fog_config: FogConfig,
         sun_config: SunConfig,
     ) {
+        let frustum = Frustum::from_camera(camera, aspect_ratio);
         let mut rendered_count = 0;
 
         // Update shader uniforms once before rendering (shaders already set on chunk materials)
@@ -305,7 +388,7 @@ impl TerrainManager {
 
         // Render chunks
         for chunk in self.batches.values() {
-            if Self::is_chunk_potentially_visible(camera, chunk) {
+            if frustum.contains_aabb(chunk.bbox.min, chunk.bbox.max) {
                 chunk.render(d, RENDER_WIREFRAME);
                 rendered_count += 1;
             }
@@ -314,7 +397,7 @@ impl TerrainManager {
         // Overlap upgraded lod chunks
         for (coord, chunk) in &self.upgrading_lod {
             if !self.batches.contains_key(coord)
-                && Self::is_chunk_potentially_visible(camera, chunk)
+                && frustum.contains_aabb(chunk.bbox.min, chunk.bbox.max)
             {
                 chunk.render(d, RENDER_WIREFRAME);
             }
@@ -343,51 +426,6 @@ impl TerrainManager {
     // Private
     fn calculate_height_from_noise(&self, x: f32, z: f32) -> f32 {
         ChunkLoader::get_height(x, z, &self.noise, &self.planet)
-    }
-
-    fn is_chunk_potentially_visible(camera: &Camera3D, chunk: &ChunkBatch) -> bool {
-        // Debugging - kill frustum culling
-        // return true;
-
-        let bbox = &chunk.bbox;
-        // Camera forward direction
-        let forward = Vector3::new(
-            camera.target.x - camera.position.x,
-            camera.target.y - camera.position.y,
-            camera.target.z - camera.position.z,
-        )
-        .normalized();
-
-        // Vector from camera to bounding box center
-        let bbox_center = Vector3::new(
-            (bbox.min.x + bbox.max.x) / 2.0,
-            (bbox.min.y + bbox.max.y) / 2.0,
-            (bbox.min.z + bbox.max.z) / 2.0,
-        );
-
-        let to_center = Vector3::new(
-            bbox_center.x - camera.position.x,
-            bbox_center.y - camera.position.y,
-            bbox_center.z - camera.position.z,
-        );
-
-        // Dot product, is chunk generally in front of camera?
-        let dot = forward.x * to_center.x + forward.y * to_center.y + forward.z * to_center.z;
-
-        // Calc bbox radius (half diagonal)
-        let radius = Vector3::new(
-            (bbox.max.x - bbox.min.x) / 2.0,
-            (bbox.max.y - bbox.min.y) / 2.0,
-            (bbox.max.z - bbox.min.z) / 2.0,
-        )
-        .length();
-
-        // Distance check with radius consideration
-        let distance = to_center.length();
-        let max_distance = (CHUNK_SIZE as f32 * VIEW_DISTANCE as f32) * MAX_DISTANCE_BUFFER;
-
-        // Chunk is visible if its in front with radius tolerance and within range
-        dot > -radius && distance < max_distance + radius
     }
 
     /// Need to know initial expected for loading screen

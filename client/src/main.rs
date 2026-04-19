@@ -50,6 +50,9 @@ fn main() {
     rl_handle.disable_cursor();
     rl_handle.set_exit_key(None);
 
+    // Aspect ratio for proper frustum culling
+    let aspect_ratio = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
+
     // WARN: Raylib wrapper does not provide a wrapper to modify clip plane
     // (all calls to raylib-rs are "unsafe" as Raylib is in C)
     unsafe {
@@ -186,6 +189,7 @@ fn main() {
             terrain_manager.render(
                 &mut draw3d_handle,
                 &player.get_camera(),
+                aspect_ratio,
                 &shader_manager,
                 fog_config,
                 sun_config,

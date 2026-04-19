@@ -1,4 +1,4 @@
-use crate::config;
+use crate::config::{self, PLAYER_FOV_DEGREES};
 use crate::world::WorldQuery;
 
 use config::{
@@ -45,7 +45,7 @@ impl Player {
             eye_position,
             eye_position + self.get_forward_vec(),
             Vector3::up(),
-            90.0,
+            PLAYER_FOV_DEGREES,
         )
     }
 

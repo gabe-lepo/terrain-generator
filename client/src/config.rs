@@ -1,7 +1,4 @@
 //! Game configuration constants
-//!
-//! All gameplay and rendering constants in one place for easy tweaking.
-//! Just change values here and recompile - no need to hunt through modules.
 
 use raylib::prelude::Color;
 
@@ -65,6 +62,9 @@ pub const SPRINT_MULTIPLIER: f32 = 2.0;
 /// Modifier applied when crouch button held down
 pub const CROUCH_MULTIPLIER: f32 = 0.5;
 
+/// FOV for camera and frustum culling
+pub const PLAYER_FOV_DEGREES: f32 = 90.0;
+
 // ============================================================================
 // NETWORK / MULTIPLAYER
 // ============================================================================
@@ -84,11 +84,11 @@ pub const POSITION_ROUND_DECIMALS: u32 = 1;
 // TERRAIN GENERATION
 // ============================================================================
 
-/// Size of each chunk in vertices per side (e.g., 16 = 16x16 grid)
+/// Size of each chunk in vertices per side
 pub const CHUNK_SIZE: i32 = 16;
 
-/// World units per vertex in the heightmap
 /// WARN: BREAKS FOG DISTANCE CALCS IF CHANGED
+/// World units per vertex in the heightmap
 pub const TERRAIN_RESOLUTION: f32 = 10.0;
 
 /// Planet options
@@ -105,6 +105,7 @@ pub const RENDER_WIREFRAME: bool = false;
 /// Higher = render farther (lower FPS), Lower = cull more (higher FPS)
 pub const MAX_DISTANCE_BUFFER: f32 = 2.0;
 
+/// WARN: Dont change this!!!
 /// Fog start/end distances as ratio of max render distance
 pub const FOG_NEAR_PERCENT: f32 = 0.3;
 pub const FOG_FAR_PERCENT: f32 = 0.4;
@@ -118,12 +119,12 @@ pub const WORLD_MAX_Y: f32 = 2_000.0;
 /// Async chunk loader thread pool size
 pub const CHUNK_LOADER_THREAD_POOLS: usize = 4;
 
+/// How many chunks to load in each direction from player
+pub const VIEW_DISTANCE: i32 = 200;
+
 /// Raylib camera max plane clip distance
 pub const FAR_CLIP_PLANE_DISTANCE: f32 =
     (VIEW_DISTANCE as f32) * (CHUNK_SIZE as f32) * TERRAIN_RESOLUTION;
-
-/// How many chunks to load in each direction from player
-pub const VIEW_DISTANCE: i32 = 150;
 
 /// Level of detail - Full resolution
 pub const LOD0_BATCH_RADIUS: i32 = 4;
