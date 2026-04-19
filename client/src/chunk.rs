@@ -1,10 +1,6 @@
-use crate::chunk_loader::ChunkData;
 use crate::config::{CHUNK_SIZE, TERRAIN_RESOLUTION};
 
 use std::f32;
-
-use raylib::ffi;
-use raylib::prelude::*;
 
 /// Chunk coordinates (not world coords!)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -33,114 +29,6 @@ impl ChunkCoord {
 
         (world_x, world_z)
     }
-}
-
-pub struct Chunk {
-    pub coord: ChunkCoord,
-    pub model: Model, // Make public so we can access materials
-    heightmap: Vec<Vec<f32>>,
-    pub bounding_box: BoundingBox,
-}
-
-impl Chunk {
-    pub fn from_data(
-        data: ChunkData,
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-        terrain_shader: Option<&Shader>,
-    ) -> Self {
-        let coord = ChunkCoord::new(data.coord.0, data.coord.1);
-        let vertices = data.vertices;
-        let colors = data.colors;
-        let bounding_box = data.bounding_box;
-
-        // WARN: Unsafe FFI calls
-        // Build mesh from pre-generated data
-        let mesh = unsafe {
-            let vertex_count = vertices.len() as i32;
-            let triangle_count = vertex_count / 3;
-
-            // Alloc mem for mesh data
-            let vertices_flat: Vec<f32> = vertices.iter().flat_map(|v| [v.x, v.y, v.z]).collect();
-
-            let colors_flat: Vec<u8> = colors.iter().flat_map(|c| [c.r, c.g, c.b, c.a]).collect();
-
-            // Copy
-            let vertices_ptr =
-                libc::malloc(vertices_flat.len() * std::mem::size_of::<f32>()) as *mut f32;
-            let colors_ptr = libc::malloc(colors_flat.len() * std::mem::size_of::<u8>()) as *mut u8;
-
-            std::ptr::copy_nonoverlapping(
-                vertices_flat.as_ptr(),
-                vertices_ptr,
-                vertices_flat.len(),
-            );
-            std::ptr::copy_nonoverlapping(colors_flat.as_ptr(), colors_ptr, colors_flat.len());
-
-            let mut mesh = ffi::Mesh {
-                vertexCount: vertex_count,
-                triangleCount: triangle_count,
-                vertices: vertices_ptr,
-                indices: std::ptr::null_mut(),
-                normals: std::ptr::null_mut(),
-                colors: colors_ptr,
-                texcoords: std::ptr::null_mut(),
-                texcoords2: std::ptr::null_mut(),
-                tangents: std::ptr::null_mut(),
-                animVertices: std::ptr::null_mut(),
-                animNormals: std::ptr::null_mut(),
-                boneIds: std::ptr::null_mut(),
-                boneWeights: std::ptr::null_mut(),
-                boneMatrices: std::ptr::null_mut(),
-                boneCount: 0,
-                vaoId: 0,
-                vboId: std::ptr::null_mut(),
-            };
-
-            // Upload to GPU
-            ffi::UploadMesh(&mut mesh, false);
-            Mesh::from_raw(mesh)
-        };
-
-        let mut model = rl
-            .load_model_from_mesh(thread, unsafe { mesh.make_weak() })
-            .expect("Failed to create model from mesh");
-
-        // Set fog shader on the model's material if provided
-        if let Some(shader) = terrain_shader {
-            let materials = model.materials_mut();
-            if let Some(material) = materials.get_mut(0) {
-                material.as_mut().shader = *shader.as_ref();
-            }
-        }
-
-        Self {
-            coord,
-            model,
-            heightmap: data.heightmap,
-            bounding_box,
-        }
-    }
-
-    pub fn render(&self, d: &mut RaylibMode3D<RaylibDrawHandle>, render_wireframe: bool) {
-        let (world_x, world_z) = self.coord.get_world_pos();
-        let position = Vector3::new(world_x, 0.0, world_z);
-
-        if render_wireframe {
-            // Wireframe only - no fog possible on lines
-            d.draw_model_wires(&self.model, position, 1.0, Color::BLACK);
-        } else {
-            // Solid model with fog shader applied via material
-            d.draw_model(&self.model, position, 1.0, Color::WHITE);
-        }
-    }
-
-    /// Wrapper exposing free func so others can easily use without self
-    pub fn get_height_at(&self, local_x: f32, local_z: f32) -> f32 {
-        sample_heightmap(&self.heightmap, local_x, local_z)
-    }
-
-    // Private
 }
 
 pub fn sample_heightmap(heightmap: &[Vec<f32>], local_x: f32, local_z: f32) -> f32 {
