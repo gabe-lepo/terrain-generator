@@ -1,4 +1,5 @@
 use crate::planet::PlanetConfig;
+use crate::utils::smoothstep;
 use noise::{NoiseFn, Perlin};
 
 pub struct ShapingContext<'a> {
@@ -99,8 +100,4 @@ impl<'a> ShapingContext<'a> {
 
         land_height * factor
     }
-}
-
-fn smoothstep(t: f64) -> f64 {
-    t * t * (3.0 - 2.0 * t)
 }

@@ -1,5 +1,6 @@
 use crate::config::*;
 use crate::planet::PlanetConfig;
+use crate::utils::smoothstep;
 use noise::{NoiseFn, Perlin};
 
 #[derive(Clone, Copy)]
@@ -153,8 +154,4 @@ fn lcg(state: u64) -> u64 {
     state
         .wrapping_mul(6364136223846793005)
         .wrapping_add(1442695040888963407)
-}
-
-fn smoothstep(t: f64) -> f64 {
-    t * t * (3.0 - 2.0 * t)
 }
