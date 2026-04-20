@@ -4,6 +4,7 @@ mod chunk;
 mod chunk_batch;
 mod chunk_loader;
 mod config;
+mod feature_stamp;
 mod network;
 mod planet;
 mod player;

@@ -1,13 +1,8 @@
-use crate::chunk::{self, ChunkCoord, sample_heightmap};
+use crate::chunk::{ChunkCoord, sample_heightmap};
 use crate::chunk_batch::{BATCH_SIZE, BatchCoord, ChunkBatch};
 use crate::chunk_loader::ChunkLoader;
-use crate::config::{
-    CHUNK_SIZE, CONNECT, FAR_CLIP_PLANE_DISTANCE, FOG_FAR_PERCENT, FOG_NEAR_PERCENT,
-    LOD0_BATCH_RADIUS, LOD1_BATCH_RADIUS, LOD2_BATCH_RADIUS, MAX_DISTANCE_BUFFER,
-    PLAYER_FOV_DEGREES, RENDER_WIREFRAME, VIEW_DISTANCE,
-};
+use crate::config::*;
 use crate::planet::PlanetConfig;
-use crate::player;
 use crate::shaders::{FogConfig, ShaderManager, SunConfig};
 use crate::world::WorldQuery;
 
@@ -40,8 +35,8 @@ impl Frustum {
         // Normal = -right*cos + fwd*sin  ... easier: cross product of edge direction with up
         // Top plane normal: (fwd - up*half_v).cross(right) normalized, pointing inward
         let left_normal = (fwd - right * half_h).cross(up).normalized();
-        let right_normal = up.cross((fwd + right * half_h)).normalized();
-        let bottom_normal = right.cross((fwd - up * half_v)).normalized();
+        let right_normal = up.cross(fwd + right * half_h).normalized();
+        let bottom_normal = right.cross(fwd - up * half_v).normalized();
         let top_normal = (fwd + up * half_v).cross(right).normalized();
 
         let make_plane = |n: Vector3| -> [f32; 4] {
@@ -51,8 +46,6 @@ impl Frustum {
             [n.x, n.y, n.z, d]
         };
 
-        let near_d = FAR_CLIP_PLANE_DISTANCE * 0.0
-            - (near_normal.x * pos.x + near_normal.y * pos.y + near_normal.z * pos.z);
         // near plane passes through pos + fwd*near_dist, far through pos + fwd*far_dist
         let near_pt = Vector3::new(
             pos.x + fwd.x * 0.01,

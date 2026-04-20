@@ -1,6 +1,10 @@
+use noise::Perlin;
 use raylib::prelude::*;
 
-use crate::config::USE_SINGLE_PLANET;
+use crate::{
+    config::USE_SINGLE_PLANET,
+    feature_stamp::{FeatureStamp, StampKind, generate_stamps},
+};
 
 #[derive(Clone)]
 pub enum PlanetType {
@@ -44,15 +48,21 @@ pub struct PlanetConfig {
     pub warp_strength: f64,
     pub use_erosion: bool,
     pub plateau_strength: f64,
+    pub shelf_depth: f64,
+    // Feature stamping
+    pub stamps: Vec<FeatureStamp>,
 }
 
 impl PlanetConfig {
     pub fn new(seed: u64) -> Self {
         let mut config: PlanetConfig;
         if USE_SINGLE_PLANET {
-            config = Self::arctic_planet();
+            config = Self::volcanic_planet();
         } else {
-            config = match seed % 5 {
+            let hashed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            config = match hashed % 5 {
                 0 => Self::jungle_planet(),
                 1 => Self::arctic_planet(),
                 2 => Self::desert_planet(),
@@ -61,6 +71,12 @@ impl PlanetConfig {
             };
         }
         config.seed = seed;
+
+        // Feature stamp generation
+        let noise = Perlin::new(seed as u32);
+        let stamp_kinds = Self::stamp_kinds_for(&config.planet_type);
+        config.stamps = generate_stamps(seed, &config, &noise, &stamp_kinds);
+
         config
     }
 
@@ -75,6 +91,40 @@ impl PlanetConfig {
     }
 
     // Private
+    fn stamp_kinds_for(planet_type: &PlanetType) -> Vec<(StampKind, u32)> {
+        match planet_type {
+            PlanetType::Volcanic => vec![
+                (StampKind::Volcano, 150),
+                (StampKind::Peak, 250),
+                (StampKind::Crater, 100),
+                (StampKind::Mesa, 25),
+            ],
+            PlanetType::Desert => vec![
+                (StampKind::Volcano, 150),
+                (StampKind::Peak, 250),
+                (StampKind::Crater, 100),
+                (StampKind::Mesa, 25),
+            ],
+            PlanetType::Arctic => vec![
+                (StampKind::Volcano, 150),
+                (StampKind::Peak, 250),
+                (StampKind::Crater, 100),
+                (StampKind::Mesa, 25),
+            ],
+            PlanetType::Jungle => vec![
+                (StampKind::Volcano, 150),
+                (StampKind::Peak, 250),
+                (StampKind::Crater, 100),
+                (StampKind::Mesa, 25),
+            ],
+            PlanetType::Islands => vec![
+                (StampKind::Volcano, 150),
+                (StampKind::Peak, 250),
+                (StampKind::Crater, 100),
+                (StampKind::Mesa, 25),
+            ],
+        }
+    }
     fn jungle_planet() -> Self {
         Self {
             grid_size: 128,
@@ -96,6 +146,8 @@ impl PlanetConfig {
             warp_strength: 0.0,
             use_erosion: true,
             plateau_strength: 0.2,
+            shelf_depth: 0.0,
+            stamps: vec![],
         }
     }
 
@@ -107,19 +159,21 @@ impl PlanetConfig {
             bands: ARCTIC_BANDS.to_vec(),
             sky_color: Color::new(160, 210, 240, 255),
             height_scale: 250.0,
-            base_height: -30.0,
+            base_height: 0.0,
             octaves: 4,
             persistence: 0.38,
             lacunarity: 2.0,
             freq_scale: 0.005,
             continent_freq: 0.0005,
-            water_threshold: -5.0,
-            continent_slope: 10.0,
+            water_threshold: -0.3,
+            continent_slope: 2.5,
             use_ridged: true,
             use_domain_warp: false,
             warp_strength: 0.0,
             use_erosion: false,
             plateau_strength: 0.1,
+            shelf_depth: 150.0,
+            stamps: vec![],
         }
     }
 
@@ -144,6 +198,8 @@ impl PlanetConfig {
             warp_strength: 0.0,
             use_erosion: false,
             plateau_strength: 0.7,
+            shelf_depth: 0.0,
+            stamps: vec![],
         }
     }
 
@@ -154,7 +210,7 @@ impl PlanetConfig {
             planet_type: PlanetType::Volcanic,
             bands: VOLCANIC_BANDS.to_vec(),
             sky_color: Color::new(80, 40, 20, 255),
-            height_scale: 350.0,
+            height_scale: 400.0,
             base_height: 0.0,
             octaves: 6,
             persistence: 0.55,
@@ -168,6 +224,8 @@ impl PlanetConfig {
             warp_strength: 0.0,
             use_erosion: true,
             plateau_strength: 0.15,
+            shelf_depth: 0.0,
+            stamps: vec![],
         }
     }
 
@@ -192,6 +250,8 @@ impl PlanetConfig {
             warp_strength: 300.0,
             use_erosion: false,
             plateau_strength: 0.3,
+            shelf_depth: 0.0,
+            stamps: vec![],
         }
     }
 }
@@ -209,8 +269,8 @@ static JUNGLE_BANDS: &[HeightBand] = &[
 
 #[rustfmt::skip]
 static ARCTIC_BANDS: &[HeightBand] = &[
-    HeightBand {max_y: -20.0, color: Color::new(25, 45, 75, 255)},
-    HeightBand {max_y: 5.0, color: Color::new(140, 160, 175, 255)},
+    HeightBand {max_y: -10.0, color: Color::new(25, 45, 75, 255)},
+    HeightBand {max_y: 10.0, color: Color::new(140, 160, 175, 255)},
     HeightBand {max_y: 40.0, color: Color::new(95, 100, 105,255)},
     HeightBand {max_y: 90.0, color: Color::new(185, 195, 205, 255)},
     HeightBand {max_y: 160.0, color: Color::new(200, 208, 215, 255)},
@@ -234,7 +294,7 @@ static VOLCANIC_BANDS: &[HeightBand] = &[
     HeightBand {max_y: 100.0, color: Color::new(60, 55, 55, 255)},
     HeightBand {max_y: 220.0, color: Color::new(80, 75, 75, 255)},
     HeightBand {max_y: 350.0, color: Color::new(140, 135, 130, 255)},
-    HeightBand {max_y: 370.0, color: Color::new(200, 195, 190, 255)},
+    HeightBand {max_y: 400.0, color: Color::new(200, 195, 190, 255)},
 ];
 
 #[rustfmt::skip]

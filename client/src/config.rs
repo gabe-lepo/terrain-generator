@@ -42,7 +42,7 @@ pub const WINDOW_HEIGHT: i32 = 1440;
 // ============================================================================
 
 /// God mode or not (flying, higher speed, no collision)
-pub const GOD_MODE: bool = true;
+pub const GOD_MODE: bool = false;
 
 /// Player move speed
 pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 50.0 };
@@ -70,7 +70,7 @@ pub const PLAYER_FOV_DEGREES: f32 = 90.0;
 // ============================================================================
 
 /// Enable/disable network connection attempts
-pub const CONNECT: bool = false;
+pub const CONNECT: bool = true;
 
 /// Position updates sent per second
 /// Higher = smoother movement, more bandwidth
@@ -92,7 +92,7 @@ pub const CHUNK_SIZE: i32 = 16;
 pub const TERRAIN_RESOLUTION: f32 = 10.0;
 
 /// Planet options
-pub const USE_SINGLE_PLANET: bool = true;
+pub const USE_SINGLE_PLANET: bool = false;
 
 // ============================================================================
 // RENDERING
@@ -100,10 +100,6 @@ pub const USE_SINGLE_PLANET: bool = true;
 
 /// If true, render wireframe only (no shaders, no models)
 pub const RENDER_WIREFRAME: bool = false;
-
-/// Multiplier for frustum culling distance beyond view distance
-/// Higher = render farther (lower FPS), Lower = cull more (higher FPS)
-pub const MAX_DISTANCE_BUFFER: f32 = 2.0;
 
 /// WARN: Dont change this!!!
 /// Fog start/end distances as ratio of max render distance

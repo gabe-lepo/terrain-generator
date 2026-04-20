@@ -1,13 +1,14 @@
 use crate::chunk_batch::{BATCH_SIZE, BatchCoord};
+use crate::config::*;
+use crate::feature_stamp::stamp_contribution;
 use crate::planet::{HeightBand, PlanetConfig};
 use crate::terrain_shaper::*;
-use crate::{config::*, planet};
 
-use noise::{NoiseFn, Perlin};
+use noise::Perlin;
 use raylib::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio::{sync::mpsc, task::JoinSet};
+use tokio::sync::mpsc;
 
 /// Request to generate a chunk
 pub struct ChunkRequest {
@@ -153,9 +154,9 @@ impl ChunkLoader {
         // Continental masking using original coords
         let continent = ShapingContext::continent_mask(xf, zf, &ctx);
         if continent < planet.water_threshold {
-            // TODO: Move this *50 to planet config
-            let depth = (continent - planet.water_threshold) * 50.0;
-            return (planet.base_height as f64 + depth) as f32;
+            let shelf_depth =
+                ((continent - planet.water_threshold) * 200.0).clamp(-planet.shelf_depth, 0.0);
+            return (planet.base_height as f64 + shelf_depth) as f32;
         }
 
         // Optionally warp coords for detail sampling
@@ -181,9 +182,20 @@ impl ChunkLoader {
         };
 
         let land_height = shaped * planet.height_scale as f64 * erosion;
-        let final_height = ShapingContext::apply_continent_factor(land_height, continent, &ctx);
+        let mut final_height = ShapingContext::apply_continent_factor(land_height, continent, &ctx);
 
-        (planet.base_height as f64 + final_height) as f32
+        //
+        let continent_factor = ((continent - planet.water_threshold)
+            / (1.0 - planet.water_threshold))
+            .clamp(0.0, 1.0)
+            .powf(planet.continent_slope);
+
+        // Feature stamping
+        for stamp in &planet.stamps {
+            final_height += stamp_contribution(xf, zf, stamp) * continent_factor;
+        }
+
+        (planet.base_height as f64 + final_height.max(0.0)) as f32
     }
 }
 
@@ -193,7 +205,6 @@ async fn chunk_loader_task(
     noise: Arc<Perlin>,
     planet: Arc<PlanetConfig>,
 ) {
-    let mut tasks: JoinSet<()> = JoinSet::new();
     let send_error_count = Arc::new(AtomicUsize::new(0));
     loop {
         tokio::select! {
