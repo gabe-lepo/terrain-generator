@@ -6,7 +6,7 @@ use raylib::prelude::Color;
 // LIGHTING & TIME OF DAY
 // ============================================================================
 
-pub const TIME_STARTING_HOUR: f32 = SUNRISE_START + 2.0;
+pub const TIME_STARTING_HOUR: f32 = SUNRISE_START;
 pub const TIME_SPEED_20_MIN: f32 = 300.0;
 pub const TIME_SPEED_DEBUG: f32 = 3000.0;
 

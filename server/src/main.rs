@@ -66,12 +66,11 @@ async fn main() {
         //   thread for persistent time tracking
         // - Seed switcher system on planet escape
         const STARTING_HOUR: f32 = 5.0;
-        const TIME_SPEED_10_MIN: f32 = 600.0;
-        const TIME_SPEED_DEBUG: f32 = 6000.0;
+        const TIME_SPEED_20_MIN: f32 = 300.0;
         const HOURS_IN_DAY: f32 = 24.0;
         const SECONDS_IN_HOUR: f32 = 3600.0;
         let elapsed_hours =
-            server_start.elapsed().as_secs_f32() * TIME_SPEED_10_MIN / SECONDS_IN_HOUR;
+            server_start.elapsed().as_secs_f32() * TIME_SPEED_20_MIN / SECONDS_IN_HOUR;
         let current_hour = (STARTING_HOUR + elapsed_hours).rem_euclid(HOURS_IN_DAY);
         let world_sync_msg = ServerMessage::WorldSync {
             seed: world_seed,
