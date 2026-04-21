@@ -42,7 +42,7 @@ pub const WINDOW_HEIGHT: i32 = 1440;
 // ============================================================================
 
 /// God mode or not (flying, higher speed, no collision)
-pub const GOD_MODE: bool = false;
+pub const GOD_MODE: bool = true;
 
 /// Player move speed
 pub const MOVE_SPEED: f32 = if GOD_MODE { 200.0 } else { 50.0 };
@@ -70,7 +70,7 @@ pub const PLAYER_FOV_DEGREES: f32 = 90.0;
 // ============================================================================
 
 /// Enable/disable network connection attempts
-pub const CONNECT: bool = true;
+pub const CONNECT: bool = false;
 
 /// Position updates sent per second
 /// Higher = smoother movement, more bandwidth
@@ -107,7 +107,7 @@ pub const FOG_NEAR_PERCENT: f32 = 0.3;
 pub const FOG_FAR_PERCENT: f32 = 0.4;
 
 /// Minimum world height
-pub const WORLD_MIN_Y: f32 = -100.0;
+pub const WORLD_MIN_Y: f32 = -200.0;
 
 /// Maximum world height
 pub const WORLD_MAX_Y: f32 = 2_000.0;

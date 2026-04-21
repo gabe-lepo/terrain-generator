@@ -1,5 +1,6 @@
 use crate::config::*;
 use crate::planet::PlanetConfig;
+use crate::terrain_shaper::sample_continent_at;
 use crate::utils::smoothstep;
 use noise::{NoiseFn, Perlin};
 
@@ -84,10 +85,15 @@ pub fn generate_stamps(
             let strength_t = rng as f64 / u64::MAX as f64;
 
             // Only place on land
-            let cx = wx * planet.continent_freq + continent_offset;
-            let cz = wz * planet.continent_freq + continent_offset;
-            let continent = noise.get([cx, cz]);
-            if continent < planet.water_threshold + 0.1 {
+            let continent = sample_continent_at(
+                wx,
+                wz,
+                planet.continent_freq,
+                planet.continent_octaves,
+                continent_offset,
+                noise,
+            );
+            if continent < planet.water_threshold + 0.05 {
                 continue;
             }
 

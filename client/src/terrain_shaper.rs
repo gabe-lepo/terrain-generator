@@ -2,6 +2,27 @@ use crate::planet::PlanetConfig;
 use crate::utils::smoothstep;
 use noise::{NoiseFn, Perlin};
 
+pub fn sample_continent_at(
+    x: f64,
+    z: f64,
+    continent_freq: f64,
+    continent_octaves: u32,
+    offset: f64,
+    noise: &Perlin,
+) -> f64 {
+    let mut value = 0.0;
+    let mut amplitude = 1.0;
+    let mut frequency = continent_freq;
+    let mut max_value = 0.0;
+    for _ in 0..continent_octaves {
+        value += noise.get([x * frequency + offset, z * frequency + offset]) * amplitude;
+        max_value += amplitude;
+        amplitude *= 0.5;
+        frequency *= 2.0;
+    }
+    (value / max_value + 1.0) / 2.0
+}
+
 pub struct ShapingContext<'a> {
     pub noise: &'a Perlin,
     pub planet: &'a PlanetConfig,
@@ -24,11 +45,15 @@ impl<'a> ShapingContext<'a> {
         }
     }
 
-    // Basic land mass mask, to get noise for heights > 0
     pub fn continent_mask(x: f64, z: f64, ctx: &ShapingContext) -> f64 {
-        let cx = x * ctx.planet.continent_freq + ctx.continent_offset;
-        let cz = z * ctx.planet.continent_freq + ctx.continent_offset;
-        ctx.noise.get([cx, cz])
+        sample_continent_at(
+            x,
+            z,
+            ctx.planet.continent_freq,
+            ctx.planet.continent_octaves,
+            ctx.continent_offset,
+            ctx.noise,
+        )
     }
 
     // Basic fractional brownian motion, with option for ridged variants
@@ -91,13 +116,5 @@ impl<'a> ShapingContext<'a> {
         let s = smoothstep(normalized);
 
         normalized * (1.0 - plateau_strength) + s * plateau_strength
-    }
-    pub fn apply_continent_factor(land_height: f64, continent: f64, ctx: &ShapingContext) -> f64 {
-        let factor = ((continent - ctx.planet.water_threshold)
-            / (1.0 - ctx.planet.water_threshold))
-            .clamp(0.0, 1.0)
-            .powf(ctx.planet.continent_slope);
-
-        land_height * factor
     }
 }

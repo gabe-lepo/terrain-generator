@@ -1,8 +1,8 @@
 use crate::chunk_batch::{BATCH_SIZE, BatchCoord};
 use crate::config::*;
 use crate::feature_stamp::stamp_contribution;
-use crate::planet::{HeightBand, PlanetConfig};
-use crate::terrain_shaper::*;
+use crate::planet::{HeightBand, PlanetConfig, height_to_color};
+use crate::terrain_shaper::{sample_continent_at, ShapingContext};
 
 use noise::Perlin;
 use raylib::prelude::*;
@@ -137,65 +137,72 @@ impl ChunkLoader {
     /// NOTE: This is the main terrain "shaping" function
     /// TODO: Caves? How to have multiple y values per x,z
     pub fn get_height(x: f32, z: f32, noise: &Perlin, planet: &PlanetConfig) -> f32 {
-        // Define shaping context
         let seed_offset = (planet.seed.wrapping_mul(2654435761) % 100_000) as f64;
         let continent_offset = (planet.seed.wrapping_mul(1234567891) % 100_000) as f64;
         let ctx = ShapingContext::new(noise, planet, seed_offset, continent_offset);
 
-        // Return water level outside planet boundary
         let world_size = planet.grid_size as f32 * CHUNK_SIZE as f32 * TERRAIN_RESOLUTION;
         if x < 0.0 || z < 0.0 || x >= world_size || z >= world_size {
-            return planet.base_height;
+            return 0.0;
         }
 
         let xf = x as f64;
         let zf = z as f64;
 
-        // Continental masking using original coords
-        let continent = ShapingContext::continent_mask(xf, zf, &ctx);
-        if continent < planet.water_threshold {
-            let shelf_depth =
-                ((continent - planet.water_threshold) * 200.0).clamp(-planet.shelf_depth, 0.0);
-            return (planet.base_height as f64 + shelf_depth) as f32;
-        }
+        let continent = sample_continent_at(
+            xf,
+            zf,
+            planet.continent_freq,
+            planet.continent_octaves,
+            continent_offset,
+            noise,
+        );
 
-        // Optionally warp coords for detail sampling
         let (sx, sz) = if planet.use_domain_warp {
             ShapingContext::domain_warp(xf, zf, &ctx)
         } else {
             (xf, zf)
         };
 
-        // Detail noise
         let raw = ShapingContext::fbm(sx, sz, &ctx, planet.use_ridged);
 
-        // Remap [-1,1] -> [0,1] for plateau curving
-        let normalized = (raw + 1.0) / 2.0;
-        let shaped = ShapingContext::apply_plateau_curve(normalized, planet.plateau_strength);
-
-        // Erosion scales height regionally
-        let erosion = if planet.use_erosion {
-            let e = ShapingContext::erosion_mask(sx, sz, &ctx);
-            if planet.use_ridged { 1.0 - e * 0.5 } else { e }
+        // Ridged FBM already returns [0,1]; plain FBM returns [-1,1] and needs remapping
+        let normalized = if planet.use_ridged {
+            raw
         } else {
-            1.0
+            (raw + 1.0) / 2.0
         };
 
-        let land_height = shaped * planet.height_scale as f64 * erosion;
-        let mut final_height = ShapingContext::apply_continent_factor(land_height, continent, &ctx);
+        let shaped = ShapingContext::apply_plateau_curve(normalized, planet.plateau_strength);
 
-        //
-        let continent_factor = ((continent - planet.water_threshold)
-            / (1.0 - planet.water_threshold))
-            .clamp(0.0, 1.0)
-            .powf(planet.continent_slope);
+        let redistributed = shaped.powf(planet.redistribution_exponent);
 
-        // Feature stamping
-        for stamp in &planet.stamps {
-            final_height += stamp_contribution(xf, zf, stamp) * continent_factor;
-        }
+        let eroded = if planet.use_erosion {
+            let e = ShapingContext::erosion_mask(sx, sz, &ctx);
+            if planet.use_ridged {
+                redistributed * (1.0 - e * 0.5)
+            } else {
+                redistributed * e
+            }
+        } else {
+            redistributed
+        };
 
-        (planet.base_height as f64 + final_height.max(0.0)) as f32
+        // Continent blend: ocean zones suppress height toward land_bias
+        let continent_influence = (1.0 - continent) * planet.blend_strength;
+        let blended = (eroded * (1.0 - continent_influence) + planet.land_bias).min(1.0);
+
+        // Sea level is Y=0; land above, seafloor below
+        const WATER_LEVEL: f64 = 0.38;
+        let mut final_height = (blended - WATER_LEVEL) * planet.height_scale as f64;
+
+        // NOTE: Temporarily disabled while tuning base pipeline params
+        // let stamp_weight = ((blended - WATER_LEVEL) / (1.0 - WATER_LEVEL)).clamp(0.0, 1.0);
+        // for stamp in &planet.stamps {
+        //     final_height += stamp_contribution(xf, zf, stamp) * stamp_weight;
+        // }
+
+        final_height as f32
     }
 }
 
@@ -359,27 +366,6 @@ fn build_mesh_data(
     (vertices, colors)
 }
 
-fn height_to_color(height: f32, bands: &[HeightBand]) -> Color {
-    // Find first band whose max_y is >= height
-    for i in 0..bands.len() {
-        if height <= bands[i].max_y {
-            // First band has no blending
-            if i == 0 {
-                return bands[0].color;
-            }
-
-            // Blend between previous and current band
-            let prev = &bands[i - 1];
-            let curr = &bands[i];
-            let band_range = curr.max_y - prev.max_y;
-            let t = ((height - prev.max_y) / band_range).clamp(0.0, 1.0);
-            return prev.color.lerp(curr.color, t);
-        }
-    }
-
-    // Above all bands, return top color
-    bands.last().map(|b| b.color).unwrap_or(Color::WHITE)
-}
 
 fn build_chunk_from_heightmap(coord: (i32, i32), heightmap: Vec<Vec<f32>>) -> ChunkData {
     ChunkData {

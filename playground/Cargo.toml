@@ -1,0 +1,10 @@
+[package]
+name = "playground"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+noise = "0.9.0"
+rand = "0.10.1"
+raylib = "5.5.1"
+sysinfo = "0.38.4"

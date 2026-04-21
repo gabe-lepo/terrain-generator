@@ -2,7 +2,7 @@ use crate::chunk::{ChunkCoord, sample_heightmap};
 use crate::chunk_batch::{BATCH_SIZE, BatchCoord, ChunkBatch};
 use crate::chunk_loader::ChunkLoader;
 use crate::config::*;
-use crate::planet::PlanetConfig;
+use crate::planet::{PlanetConfig, PlanetType};
 use crate::shaders::{FogConfig, ShaderManager, SunConfig};
 use crate::world::WorldQuery;
 
@@ -107,10 +107,9 @@ pub struct TerrainManager {
 }
 
 impl TerrainManager {
-    pub fn new() -> Self {
-        let seed = if CONNECT { 0 } else { 12345 };
+    pub fn new_with_seed(seed: u64, planet_type: PlanetType) -> Self {
         let noise = Perlin::new(seed as u32);
-        let planet = Arc::new(PlanetConfig::new(seed));
+        let planet = Arc::new(PlanetConfig::new_typed(seed, planet_type));
         let chunk_loader = ChunkLoader::new(noise, Arc::clone(&planet));
 
         let grid = planet.grid_size as i32;
@@ -476,7 +475,7 @@ impl WorldQuery for TerrainManager {
         // Clamp to world bound
         if chunk_coord.x < 0 || chunk_coord.z < 0 || chunk_coord.x >= grid || chunk_coord.z >= grid
         {
-            return self.planet.base_height;
+            return 0.0;
         }
 
         if let Some(heightmap) = self.heightmaps.get(&chunk_coord) {
